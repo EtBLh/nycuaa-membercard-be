@@ -1,13 +1,5 @@
-from flask import Flask,  request, jsonify
-import hashlib
-import json
 import os
-import subprocess
 import shutil
-from PIL import Image
-from io import BytesIO
-import mysql.connector
-from mysql.connector import Error
 import base64
 import uuid
 import smtplib
@@ -17,8 +9,8 @@ from email.mime.base import MIMEBase
 from email.mime.application import MIMEApplication
 from email import encoders
 from email.message import EmailMessage
+from src import server
 
-cursor = ""
 def copy_folder(src, dest):
     # Ensure the source directory exists
     if not os.path.exists(src):
@@ -50,52 +42,47 @@ def move_file(src, dest):
     except Exception as e:
         print(f"Error occurred while moving file: {e}")
 
-def connect_to_mysql(host, database, user, password, govid, name):
+def fetch_user_by_nameid(govid, name):
     try:
         # Connect to the MySQL database
-        connection = mysql.connector.connect(
-            host=host,
-            database=database,
-            user=user,
-            password=password
-        )
+        connection = server.dbpool.get_connection()
         rt = []
         if connection.is_connected():
             db_info = connection.get_server_info()
-            print(f'Connected to MySQL Server version {db_info}')
+            print(f'[+] connected to MySQL Server version {db_info}')
             
             cursor = connection.cursor()
-            print(f"SELECT * from member_id where govid=\"{govid}\" and name=\"{name}\";")
-            cursor.execute(f"SELECT * from member_id where govid=\"{govid}\" and name=\"{name}\";")
-            record = cursor.fetchone()
-            print(record)
-            rt.append(record)
-            cursor.execute(f"SELECT qr from qrcode where id=\"{record[0]}\";")
-            rows = cursor.fetchall()
-            if(len(rows) == 0):
-                uid = str(uuid.uuid4())
-                # print(f"INSERT INTO qrcode (id,qr) values (\"{record[0]}\", \"{uid}\");")
-                cursor.execute(f"INSERT INTO qrcode (id,qr) values (\"{record[0]}\", \"{uid}\");")
-                connection.commit()
-                rt.append(uid)
-            else:
-                rt.append(rows[0][0])
-            cursor.close()
-            connection.close()
-            return rt
-                
-    except Error as e:
-        print(f'Error: {e}')
-        return []
+            cursor.execute("SELECT * FROM member_id WHERE govid = %s AND name = %s;", (govid, name))
+            
+            if record := cursor.fetchone():
+                # if qrcode does not exist, update DB
+                if qrcode := record[7] is None :
+                    uid = str(uuid.uuid4())
+                    cursor.execute("UPDATE member_id SET qrcode = %s WHERE govid = %s AND name = %s;", (new_qrcode, govid, name))
+                    connection.commit()
+                    record[7] = uid
+                    print(f'[+] db: updated user qrcode(govid={govid}, name={name}, qrcode={qrcode})')
 
-def send_email_with_attachment( to_email, attachment_path):
-    # Create the email message
-    from_email="member_card@nycuaa.org"
-    from_email_password="qbak zcwk bkko zydp"
+                cursor.close()
+                connection.close()
+                return record
+            else:
+                print(f'[-] db: no matching data found(govid={govid}, name={name})')
+                return None
+    except Error as e:
+        print(f'[-] db error: {e}')
+        return None
+
+def send_email_with_attachment(subject, to_email, attachment_path ):
+
+    from_email=os.getenv('email')
+    from_email_password=os.getenv('email_pw')
+
     msg = MIMEMultipart('mixed')
-    msg['Subject'] = "【陽明交大校友總會】2025年度會員證—寄發信"
+    msg['Subject'] = subject
     msg['From'] = from_email
     msg['To'] = to_email
+    
     with open('updatepass.html', 'r', encoding='utf-8') as file:
         html_content = file.read()
     # print(html_content)
@@ -125,8 +112,8 @@ def send_email_with_attachment( to_email, attachment_path):
         print(f'Failed to send email: {e}')
 
 
-if __name__ == '__main__':
-    # Define the paths to the certificate and key files
-    cert_file = '/etc/letsencrypt/live/nycuaa.org/fullchain.pem'
-    key_file = '/etc/letsencrypt/live/nycuaa.org/privkey.pem'
-    send_email_with_attachment("jim1010336@gmail.com","/var/www/pass_files/a49bbd7e-9113-417c-b690-cd2bdba4ca92.pkpass", "/home/ubuntu/membercard/invoice/1.pdf")
+# if __name__ == '__main__':
+#     # Define the paths to the certificate and key files
+#     cert_file = '/etc/letsencrypt/live/nycuaa.org/fullchain.pem'
+#     key_file = '/etc/letsencrypt/live/nycuaa.org/privkey.pem'
+#     send_email_with_attachment("jim1010336@gmail.com","/var/www/pass_files/a49bbd7e-9113-417c-b690-cd2bdba4ca92.pkpass", "/home/ubuntu/membercard/invoice/1.pdf")

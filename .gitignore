@@ -1,4 +1,5 @@
 # created by virtualenv automatically
-uploads
-passses
 *.pem
+keys
+__pycache__
+**/__pycache__

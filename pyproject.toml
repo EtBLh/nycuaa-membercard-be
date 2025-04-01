@@ -1,0 +1,23 @@
+[project]
+name = "nycuaa-membercard"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "lkc404"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "flask (>=3.1.0,<4.0.0)",
+    "mysql-connector-python (>=9.2.0,<10.0.0)",
+    "pillow (>=11.1.0,<12.0.0)",
+    "dotenv (>=0.9.9,<0.10.0)"
+]
+
+[tool.poetry]
+packages = [{ include = "src" }]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

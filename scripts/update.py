@@ -1,6 +1,4 @@
 #! ./bin/python3.12
-
-
 from flask import Flask,  request, jsonify
 import hashlib
 import json
@@ -212,7 +210,7 @@ def newpass(name,qrcode,dir,govid,id):
     data['barcode']['message'] = qrcode
     data['generic']['primaryFields'][0]['value'] = name
     data['generic']['secondaryFields'][0]['value'] = str(2000+math.floor(id / 100000))
-    data['generic']['auxiliaryFields'][1]['value'] = "2026/03/24"
+    data['generic']['auxiliaryFields'][1]['value'] = "2025/12/31"
     data['generic']['backFields'] = []
     if (id<2404452):
         data['generic']['auxiliaryFields'][0]['value'] = "普通會員（創始會員）"
@@ -238,7 +236,7 @@ def newpass(name,qrcode,dir,govid,id):
     print("Manifest signed successfully.")
 
     # Create the .pkpass file
-    create_pkpass(pass_directory, output_file)
+    pkpass.create(pass_directory, output_file)
     print(f"{output_file}.pkpass created successfully.")
     current_dir = os.getcwd()
     src = os.path.join(current_dir, output_file+".pkpass")
@@ -247,7 +245,7 @@ def newpass(name,qrcode,dir,govid,id):
 
 def update_member_card(govid, name):
     try:
-        rt = connect_to_mysql("membership.ct4ismqeal59.ap-northeast-1.rds.amazonaws.com","member", "admin", "nycuaa123x", govid, name)
+        rt = util.fetch_user_by_nameid("membership.ct4ismqeal59.ap-northeast-1.rds.amazonaws.com","member", "admin", "nycuaa123x", govid, name)
     except Exception as e:
         return jsonify({'error': 'No user found'}), 400
     if (len(rt)==0 ):
