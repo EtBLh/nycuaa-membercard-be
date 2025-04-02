@@ -110,7 +110,7 @@ def checkin_member_by_id(id):
         print(f'[-] db error: {e}')
         return None, False
 
-def send_email_with_attachment( subject, to_email, attachment_path ):
+def send_email_with_attachment( subject, to_email, template_path, attachment_path ):
 
     from_email=os.getenv('email')
     from_email_password=os.getenv('email_pw')
@@ -120,7 +120,7 @@ def send_email_with_attachment( subject, to_email, attachment_path ):
     msg['From'] = from_email
     msg['To'] = to_email
     
-    with open('output.html', 'r', encoding='utf-8') as file:
+    with open(template_path, 'r', encoding='utf-8') as file:
         html_content = file.read()
 
     html_part = MIMEText(html_content, 'html')

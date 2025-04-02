@@ -76,7 +76,7 @@ def newpass():
     pkpass.newpass(rt[1], rt[7], rt[2], rt[0], rt[6])
     
     dst = os.path.join("/var/www/pass_files", rt[1]+".pkpass")
-    send_email_with_attachment("【陽明交大校友總會】2025年度會員證—寄發信", rt[0][5], dst)
+    send_email_with_attachment("【陽明交大校友總會】2025年度會員證—寄發信", rt[0][5], 'html_template/output.html', dst)
     return "success"
     
 @app.route('/api/upload_icon', methods=['POST'])
