@@ -10,7 +10,7 @@ def generate_manifest(pass_directory):
                     manifest[file] = sha1_hash
     return manifest
 
-def save_manifest(manifest, output_file):
+def save_manifest(manifest, output_filename):
     with open(output_file, 'w') as f:
         json.dump(manifest, f, indent=4)
 
@@ -28,8 +28,7 @@ def create(pass_directory, output_file):
     shutil.make_archive(output_file, 'zip', pass_directory)
     os.rename(output_file + '.zip', output_file + '.pkpass')
 
-def newpass(name,qrcode,govid,id):
-
+def newpass(name,qrcode,govid,id,type):
     current_dir = os.getcwd()
     dir = os.path.join(current_dir, govid)
 
@@ -42,19 +41,22 @@ def newpass(name,qrcode,govid,id):
     data['barcode']['message'] = qrcode
     data['generic']['primaryFields'][0]['value'] = name
     data['generic']['secondaryFields'][0]['value'] = "2024"
-    if (id<2404452):
+
+    if type == 'founding':
         data['generic']['auxiliaryFields'][0]['value'] = "普通會員（創始會員）"
-    else:
+    elif type == 'group':
+        data['generic']['auxiliaryFields'][0]['value'] = "團體會員"
+    else: # type == 'normal'
         data['generic']['auxiliaryFields'][0]['value'] = "普通會員"
-    # print(data)
+    
     with open(file_path, 'w') as file:
         json.dump(data, file, indent=4)
     
     pass_directory = dir
-    wwdr_cert = "/home/ubuntu/membercard/WWDR.pem"
-    signer_cert = "/home/ubuntu/membercard/signerCert.pem"
-    signer_key = "/home/ubuntu/membercard/signerKey.pem"
-    output_file = qrcode
+    wwdr_cert = os.getenv('wwdr_cert_path')
+    signer_cert = os.getenv('signer_cert_path')
+    signer_key = os.getenv('signer_key_path')
+    output_filename = qrcode
 
     # Generate the manifest
     manifest = generate_manifest(pass_directory)
@@ -66,10 +68,10 @@ def newpass(name,qrcode,govid,id):
     print("Manifest signed successfully.")
 
     # Create the .pkpass file
-    pkpass.create(pass_directory, output_file)
-    print(f"{output_file}.pkpass created successfully.")
+    pkpass.create(pass_directory, output_filename)
+    print(f"{output_filename}.pkpass created successfully.")
     current_dir = os.getcwd()
-    src = os.path.join(current_dir, output_file+".pkpass")
-    dst = os.path.join("/var/www/pass_files", output_file+".pkpass")
+    src = os.path.join(current_dir, output_filename+".pkpass")
+    dst = os.path.join("/var/www/pass_files", output_filename+".pkpass")
     move_file(src,dst)
     return "success"

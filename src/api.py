@@ -1,50 +1,38 @@
 from flask import Flask,  request, jsonify
-import hashlib
-import json
 import os
-import subprocess
-import shutil
 from PIL import Image
 from io import BytesIO
-import mysql.connector
-from mysql.connector import Error
-import base64
-import uuid
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email.mime.application import MIMEApplication
-from email import encoders
 from src import util
 from src import pkpass
-from mysql.connector import pooling
 
 # flask app
 app = Flask(__name__)
-# mysql connection pool
-dbpool = pooling.MySQLConnectionPool(
-    pool_name="membercard_db_pool",
-    pool_size=5,
-    host=os.getenv('db_host'),
-    user=os.getenv('db_user'),
-    password=os.getenv('db_pw'),
-    database=os.getenv('db_database')
-)
+
+@app.route('/api/check-in/<qrcode>', methods=['POST'])
+def qrcode_check_in(qrcode):
+    member_data, ok = util.fetch_member_by_qrcode(qrcode)
+    if ok:
+        if member_data:
+            util.checkin_member_by_id(member_data[0])
+            return jsonify({'name': member_data[1]}), 200
+        else:
+            return jsonify({'message': 'no member found'}), 404
+    else:
+        return jsonify({'message': 'error occured'}), 500
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    pass
+    return jsonify({'error': 'not implemented'}), 400 
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
-    pass
+    return jsonify({'error': 'not implemented'}), 400
 
 @app.route('/api/user_icon', methods=['GET'])
 def get_user_icon():
-    pass
+    return jsonify({'error': 'not implemented'}), 400
 
-@app.route('/api/newpass', methods=['POST'])
+@app.route('/api/newpass_by_namegovid', methods=['POST'])
 def newpass():
     name = request.args.get('name')
     govid = request.args.get('govid')
@@ -54,7 +42,7 @@ def newpass():
         return jsonify({'error': 'Invalid JSON format'}), 400
 
     try:
-        record = util.fetch_user_by_nameid(govid, name)
+        record = util.fetch_member_by_namegovid(govid, name)
     except Exception as e:
         return jsonify({'error': 'No user found'}), 400
 
@@ -85,7 +73,7 @@ def newpass():
     else:
         delete_folder(destination_folder)
         return jsonify({'error': 'missing field: icon'}), 400
-    pkpass.newpass(rt[1],rt[7],rt[2],rt[0])
+    pkpass.newpass(rt[1], rt[7], rt[2], rt[0], rt[6])
     
     dst = os.path.join("/var/www/pass_files", rt[1]+".pkpass")
     send_email_with_attachment("【陽明交大校友總會】2025年度會員證—寄發信", rt[0][5], dst)
@@ -101,7 +89,7 @@ def upload_icon():
         return jsonify({'error': 'Invalid JSON format'}), 400
 
     try:
-        record = util.fetch_user_by_nameid(govid, name)
+        record = util.fetch_member_by_namegovid(govid, name)
     except Exception as e:
         return jsonify({'error': 'No user found'}), 400
 

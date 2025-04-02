@@ -245,7 +245,7 @@ def newpass(name,qrcode,dir,govid,id):
 
 def update_member_card(govid, name):
     try:
-        rt = util.fetch_user_by_nameid("membership.ct4ismqeal59.ap-northeast-1.rds.amazonaws.com","member", "admin", "nycuaa123x", govid, name)
+        rt = util.fetch_member_by_namegovid("membership.ct4ismqeal59.ap-northeast-1.rds.amazonaws.com","member", "admin", "nycuaa123x", govid, name)
     except Exception as e:
         return jsonify({'error': 'No user found'}), 400
     if (len(rt)==0 ):

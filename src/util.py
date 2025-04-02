@@ -3,13 +3,15 @@ import shutil
 import base64
 import uuid
 import smtplib
+from mysql.connector import Error
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email.mime.application import MIMEApplication
 from email import encoders
 from email.message import EmailMessage
-from src import server
+from src import api
+from src import db
 
 def copy_folder(src, dest):
     # Ensure the source directory exists
@@ -42,11 +44,9 @@ def move_file(src, dest):
     except Exception as e:
         print(f"Error occurred while moving file: {e}")
 
-def fetch_user_by_nameid(govid, name):
+def fetch_member_by_namegovid(govid, name):
     try:
-        # Connect to the MySQL database
-        connection = server.dbpool.get_connection()
-        rt = []
+        connection = db.pool.get_connection()
         if connection.is_connected():
             db_info = connection.get_server_info()
             print(f'[+] connected to MySQL Server version {db_info}')
@@ -61,19 +61,56 @@ def fetch_user_by_nameid(govid, name):
                     cursor.execute("UPDATE member_id SET qrcode = %s WHERE govid = %s AND name = %s;", (new_qrcode, govid, name))
                     connection.commit()
                     record[7] = uid
-                    print(f'[+] db: updated user qrcode(govid={govid}, name={name}, qrcode={qrcode})')
+                    print(f'[+] db: member {name} does not have qrcode, created qrcode={qrcode} for member')
 
                 cursor.close()
                 connection.close()
-                return record
+                return record, True
             else:
                 print(f'[-] db: no matching data found(govid={govid}, name={name})')
-                return None
+                return None, True
     except Error as e:
         print(f'[-] db error: {e}')
-        return None
+        return None, False
 
-def send_email_with_attachment(subject, to_email, attachment_path ):
+def fetch_member_by_qrcode(qrcode):
+    try:
+        connection = db.pool.get_connection()
+        if connection.is_connected():
+            cursor = connection.cursor()
+            cursor.execute("SELECT * FROM member_id WHERE qrcode = %s;", [qrcode])
+            
+            if record := cursor.fetchone():
+                cursor.close()
+                connection.close()
+                return record, True
+            else:
+                print(f'[-] db: no matching data found(qrcode={qrcode})')
+                return None, True
+    except Error as e:
+        print(f'[-] db error: {e}')
+        return None, False
+
+# TODO: finish this function
+def checkin_member_by_id(id):
+    try:
+        connection = db.pool.get_connection()
+        if connection.is_connected():
+            cursor = connection.cursor()
+            cursor.execute("SELECT * FROM member_id WHERE qrcode = %s;", [qrcode])
+            
+            if record := cursor.fetchone():
+                cursor.close()
+                connection.close()
+                return record, True
+            else:
+                print(f'[-] db: no matching data found(qrcode={qrcode})')
+                return None, True
+    except Error as e:
+        print(f'[-] db error: {e}')
+        return None, False
+
+def send_email_with_attachment( subject, to_email, attachment_path ):
 
     from_email=os.getenv('email')
     from_email_password=os.getenv('email_pw')
@@ -83,9 +120,9 @@ def send_email_with_attachment(subject, to_email, attachment_path ):
     msg['From'] = from_email
     msg['To'] = to_email
     
-    with open('updatepass.html', 'r', encoding='utf-8') as file:
+    with open('output.html', 'r', encoding='utf-8') as file:
         html_content = file.read()
-    # print(html_content)
+
     html_part = MIMEText(html_content, 'html')
     msg.attach(html_part)
     if attachment_path:
@@ -103,17 +140,10 @@ def send_email_with_attachment(subject, to_email, attachment_path ):
         msg.attach(part)
         # Connect to the SMTP server and send the email
     try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(from_email, from_email_password)
-        server.sendmail(from_email, to_email, msg.as_string())
+        mail_server = smtplib.SMTP('smtp.gmail.com', 587)
+        mail_server.starttls()
+        mail_server.login(from_email, from_email_password)
+        mail_server.sendmail(from_email, to_email, msg.as_string())
         print(f'Email sent to {to_email}')
     except Exception as e:
         print(f'Failed to send email: {e}')
-
-
-# if __name__ == '__main__':
-#     # Define the paths to the certificate and key files
-#     cert_file = '/etc/letsencrypt/live/nycuaa.org/fullchain.pem'
-#     key_file = '/etc/letsencrypt/live/nycuaa.org/privkey.pem'
-#     send_email_with_attachment("jim1010336@gmail.com","/var/www/pass_files/a49bbd7e-9113-417c-b690-cd2bdba4ca92.pkpass", "/home/ubuntu/membercard/invoice/1.pdf")
