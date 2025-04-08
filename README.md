@@ -7,6 +7,12 @@ A python server for managing nycuaa membercard, it handles:
   - add member data to database
   - update membercard
 
+## Requirement
+
+- OS: ubuntu | debian
+- python3
+- poetry (manage python enviroment and packages)
+
 ## Deploy
 ```
 poetry install
@@ -14,50 +20,13 @@ eval $(poetry env activate)
 python ./scripts/init_server.py
 ```
 
-## API
+## API list
 
-**POST** `/api/newpass?govid=<govid>&name=<name>`  
-Description: Issue a new pass for the current loged in member
+### Unauth API
 
-request (json):
-| field | value_type |
-| ---- | ---------- |
-| icon | string, icon image in base64 encoding |
+**POST** `/api/login`   
 
-resposne (text):
-"success"  
-  
-*todo: this should be changed to checking token instead of govid and name*
-
-### to be implement
-
-**POST** `/api/check-in/:qrcode`  
-Description: check in for member conference using member qrcode, need admin privilege
-
-request (json):
-| field | value_type |
-| ---- | ---------- |
-| token | string |
-
-resposne (json):
-| field | value_type |
-| ---- | ---------- |
-| name | string |
-
-**POST** `/api/newpass`  
-Description: Issue a new pass for the current loged in member
-
-request (json):
-| field | value_type |
-| ---- | ---------- |
-| token | string |
-| icon | string, icon image in base64 encoding |
-
-resposne (text):
-"success"  
-
-**POST** `/api/login`  
-Description: login with member's govid and name, a email will sent to member's email addr afterward, after clicking the url in email, member will log in successfully.
+Description: login with member's govid and name, a email will sent to member's email addr afterward, after entering the otp code in email, member will log in successfully.
 
 request (json):
 | field | value_type |
@@ -65,18 +34,108 @@ request (json):
 | name | string |
 | govid | string |
 
-resposne (text):
-"success"
+resposne (json) 200:  
+| field | value_type |
+| ---- | ---------- |
+| message | "otp code sent" |
+| email | "hello****@gamil.com" |
 
-**POST** `/api/validate_email_token`  
-Description: after clicking the url in email, the newly entered web page will use this api to validate the email_token(as a url param), and eventually fetch a real token 
+--------
+
+**POST** `/api/otp_verify`  
+Description: verify the otp code in email, the access token, alongside with member data will sent to frontend as response
 
 request (json):
 | field | value_type |
 | ---- | ---------- |
-| email_token | string |
+| code | string |
 
 resposne (json):
 | field | value_type |
 | ---- | ---------- |
 | token | string |
+| name | string |
+| id | string |
+| email | string |
+| govid | string |
+
+### Authed API
+Api below need authorization, please make sure you have a header in your request
+
+| field | value_type |
+| ---- | ---------- |
+| Authorization | "Bearer <the_token>" |
+
+--------
+
+**POST** `/api/member/check_token`  
+Description: check is the token valid
+
+**for valid token**
+
+resposne (JSON) 200:
+| field | value_type |
+| ---- | ---------- |
+| valid | true |
+
+**for invalid token**
+
+resposne (JSON) 401:
+| field | value_type |
+| ---- | ---------- |
+| valid | true |
+
+
+--------
+
+**POST** `/api/member/pass`  
+Description: Issue a new pass for the current logged in member
+
+resposne (JSON) 200:
+| field | value_type |
+| ---- | ---------- |
+| status | 'success' |
+
+--------
+
+**GET** `/api/member/pass`
+Description: get the member pkpass files if exists
+
+resposne (file) 200: the pkpass file
+response 
+
+--------
+
+**PUT** `/api/member/icon`  
+Description: upload the member icon
+
+request (form_data):
+| field | value_type |
+| ---- | ---------- |
+| file | the icon file(.jpg, .jpeg, .png, .gif) |
+
+resposne (json) 200:
+| field | value_type |
+| ---- | ---------- |
+| message | 'Icon uploaded successfully' |
+
+--------
+
+**GET** `/api/member/icon`  
+Description: get the member icon
+
+resposne (file) 200: the member's icon
+
+--------
+
+## need admin prvilege
+
+**POST** `/api/check-in/:qrcode`  
+Description: check in for member conference using member qrcode, need admin privilege
+
+resposne (json):
+| field | value_type |
+| ---- | ---------- |
+| name | string |
+
+--------
