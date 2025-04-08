@@ -23,24 +23,33 @@ def update_member_card(govid, name):
     dst = os.path.join("/var/www/pass_files", rt[1]+".pkpass")
     send_email_with_attachment(rt[0][5],dst)
 
+
 if __name__ == '__main__':
     data_ok = True
     session = db.session_local()
+    data_ok_members = []
+    data_not_ok_members = []
     for idx, memid in enumerate(updatemem):
         memberd = session.member = session.query(db.Member).filter_by(id=memid).first()
         if not memberd:
             print(f'nodbdata: {memid}')
             data_ok = False
+            data_not_ok_members.append(memid)
             continue
-        icondir = os.path.join(os.getcwd(), os.getenv('icons_path'))
-        iconname = util.get_icon_name_by_govid(icondir, memberd.govid)
-        if not iconname:
-            print(f'noicondata: {memid} {memberd.name}')
+        passdir = os.path.join(os.getcwd(), os.getenv('passes_path'), memberd.govid)
+        if not os.path.exists(passdir):
+            print(f'nopassdata: {memid} {memberd.name} {memberd.govid}')
             data_ok = False
+            data_not_ok_members.append(memid)
+            continue
+        data_ok_members.append(memid)
     if not data_ok:
-        print('member data are not ok: lack of icon or no db row')
-        os._exit(0)
-    print('not implemented')
+        print('member data are not ok: lack of previous pass or no db row')
+    
+    print('data ok: ', end='')
+    print(data_ok_members)
+    print('data not ok: ', end='')
+    print(data_not_ok_members)
     
 
 

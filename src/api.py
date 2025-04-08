@@ -1,16 +1,25 @@
 from flask import Flask,  request, jsonify, send_from_directory
 from flask_cors import CORS
-from PIL import Image
+from werkzeug.utils import secure_filename
+from PIL import Image, ImageFile, ExifTags
 from mysql.connector import Error
 from io import BytesIO
 import random
 import string
 import os
 import re
+from threading import Thread
+
+# -----------------env var-----------------
+from dotenv import load_dotenv
+load_dotenv(override=True)
+# -----------------------------------------
 
 from src import util
 from src import pkpass
 from src import db
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # flask app
 app = Flask(__name__)
@@ -125,8 +134,10 @@ def get_member_by_token():
 # check is token ok
 @app.route('/api/member/check_token', methods=['POST'])
 def check_token():
-    data = request.get_json()
-    token = data.get('token')
+    auth_header = request.headers.get('Authorization')
+    token = ''
+    if auth_header:
+        token = auth_header.split()[1]  # Extracts the token
 
     if not token:
         return jsonify({'valid': False, 'error': 'Token is required'}), 400
@@ -193,16 +204,43 @@ def upload_member_icon():
         if not member:
             return jsonify({'error': 'Invalid token'}), 401
 
-        # Check if the file has an allowed extension
-        if file and util.is_icon_ext_allowed(file.filename):
-            # Secure the filename and save the file
-            filename = f"{member.govid}{os.path.splitext(file.filename)[1]}"
-            filepath = os.path.join(os.getenv('icons_path'), filename)
-            file.save(filepath)
-            return jsonify({'message': 'Icon uploaded successfully'}), 200
-        else:
-            return jsonify({'error': 'Invalid file type'}), 400
+        # Check if the file is a valid image by trying to open it
+        try:
+            img = Image.open(file)
+            img.verify()  # Verify the image integrity
+        except (IOError, SyntaxError) as e:
+            return jsonify({'error': 'Invalid image file'}), 400
+
+        # Secure the filename and save the file as PNG
+        filename = f"{member.govid}.png"  # Save as .png
+        filepath = os.path.join(os.getcwd(), os.getenv('icons_path'), filename)
+
+        # Convert and save the image as PNG
+        img = Image.open(file)
+
+        # Correct the image orientation if necessary
+        try:
+            # Check if image has EXIF data
+            exif = img._getexif()
+            if exif is not None:
+                # Iterate through EXIF tags and look for orientation tag
+                for tag, value in exif.items():
+                    if tag in ExifTags.TAGS and ExifTags.TAGS[tag] == 'Orientation':
+                        if value == 3:
+                            img = img.rotate(180, expand=True)
+                        elif value == 6:
+                            img = img.rotate(270, expand=True)
+                        elif value == 8:
+                            img = img.rotate(90, expand=True)
+        except (AttributeError, KeyError, IndexError):
+            pass  # No EXIF data or invalid EXIF tag, just continue
+        
+        img.thumbnail((1024,1024)) # Resize img to save disk space
+        img.save(filepath, 'PNG')  # Save as PNG format
+
+        return jsonify({'message': 'Icon uploaded successfully'}), 200
     except Exception as e:
+        print(f'error {str(e)}')
         return jsonify({'error': f'An error occurred: {str(e)}'}), 500
     finally:
         session.close()
@@ -261,6 +299,8 @@ def create_member_pass():
         current_dir = os.getcwd()
         source_folder = os.path.join(current_dir, 'src', 'pass_template')
         destination_folder = os.path.join(current_dir, os.getenv('passes_path'), member.govid)
+        if os.path.exists(destination_folder):
+            util.delete_folder(destination_folder)
         util.copy_folder(source_folder, destination_folder)
 
         icon_dir = os.path.join(os.getcwd(), os.getenv('icons_path'))
@@ -274,10 +314,12 @@ def create_member_pass():
 
             #save thumbnail
             file_path = os.path.join(destination_folder, "thumbnail@2x.png")
+            image.thumbnail((640,640))
             image.save(file_path, 'PNG')
 
             #save thumbnail
             file_path = os.path.join(destination_folder, "thumbnail.png")
+            image.thumbnail((320,320))
             image.save(file_path, 'PNG')
         else:
             delete_folder(destination_folder)
@@ -286,23 +328,24 @@ def create_member_pass():
         
         dst = os.path.join(os.getcwd(), os.getenv('pkfiles_path'), member.qrcode+".pkpass")
         email_template_path = os.path.join(os.getcwd(), 'src', 'email_templates','output.html')
-        util.send_email_with_attachment("【陽明交大校友總會】2025年度會員證—寄發信", member.email, email_template_path, dst)
+        
+        Thread(target=util.send_email_with_attachment, args=("【陽明交大校友總會】2025年度會員證—寄發信", member.email, email_template_path, dst)).start()
+
         return jsonify({"status": "success"}), 200
 
     except Exception as e:
+        print(f'error {str(e)}')
         return jsonify({'error': str(e)}), 500
 
 # get user pass
-@app.route('/api/member/pass', methods=['GET'])
+@app.route('/api/download/member_pass.pkpass', methods=['GET'])
 def get_member_pass():
 
-    # Extract the Authorization header
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+    token = request.args.get('token')
 
-    # Extract the token
-    token = auth_header.split(' ')[1]
+    # Extract the Authorization header
+    if not token:
+        return jsonify({'error': 'Authorization token is missing or invalid'}), 401
 
     # Authenticate the user based on the token
     session = db.session_local()
@@ -317,12 +360,12 @@ def get_member_pass():
         if not os.path.exists(os.path.join(directory, filename)):
             return jsonify({'error': 'pkpass file not found'}), 404
 
-        return send_from_directory(directory, filename)
+        return send_from_directory(directory, filename, mimetype='application/vnd.apple.pkpass', as_attachment=True)
     except Exception as e:
         return jsonify({'error': f'An error occurred: {str(e)}'}), 500
     finally:
         session.close()
 
-@app.route('/health', methods=['GET'])
+@app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy"}), 200

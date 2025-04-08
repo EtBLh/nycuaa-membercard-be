@@ -46,11 +46,11 @@ def newpass(member: db.Member):
     with open(file_path, 'r') as file:
         data = json.load(file)
     data['serialNumber'] = govid
-    data['webServiceURL'] = "https://nycuaa.org/passes/"
+    data['webServiceURL'] = "https://membercard.nycuaa.org/"
     data['authenticationToken'] = qrcode
     data['barcode']['message'] = qrcode
     data['generic']['primaryFields'][0]['value'] = name
-    data['generic']['secondaryFields'][0]['value'] = "2024"
+    data['generic']['secondaryFields'][0]['value'] = "2025"
 
     if type == 'founding':
         data['generic']['auxiliaryFields'][0]['value'] = "普通會員（創始會員）"

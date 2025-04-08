@@ -59,6 +59,8 @@ resposne (json):
 | email | string |
 | govid | string |
 
+--------
+
 ### Authed API
 Api below need authorization, please make sure you have a header in your request
 
@@ -98,7 +100,7 @@ resposne (JSON) 200:
 
 --------
 
-**GET** `/api/member/pass`
+**GET** `/api/member/pass`  
 Description: get the member pkpass files if exists
 
 resposne (file) 200: the pkpass file
@@ -122,13 +124,15 @@ resposne (json) 200:
 --------
 
 **GET** `/api/member/icon`  
-Description: get the member icon
+Description: get the member icon  
 
-resposne (file) 200: the member's icon
+request: none  
+
+resposne (file) 200: the member's icon  
 
 --------
 
-## need admin prvilege
+## API for Admin privilege
 
 **POST** `/api/check-in/:qrcode`  
 Description: check in for member conference using member qrcode, need admin privilege

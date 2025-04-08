@@ -3,6 +3,7 @@ import shutil
 import base64
 import uuid
 import smtplib
+import asyncio
 from mysql.connector import Error
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -49,7 +50,7 @@ def move_file(src: str, dest: str) -> None:
     except Exception as e:
         print(f"Error occurred while moving file: {e}")
 
-def send_email_with_attachment( subject: str, to_email: str, template_path: str, attachment_path: str ) -> None:
+async def async_send_email_with_attachment( subject: str, to_email: str, template_path: str, attachment_path: str ) -> None:
 
     from_email=os.getenv('email')
     from_email_password=os.getenv('email_pw')
@@ -126,3 +127,15 @@ def get_icon_name_by_govid(icon_directory: str, govid: str) -> str|None:
 
 def pick(obj, *attrs):
     return [getattr(obj, attr) for attr in attrs]
+
+async def async_email_worker(subject, recipient, email_template, attachment_path):
+    await async_send_email_with_attachment(subject, recipient, email_template, attachment_path)
+
+def send_email_with_attachment(subject, recipient, email_template, attachment_path):
+    # Get the current event loop from the running thread
+    loop = asyncio.new_event_loop()
+
+    asyncio.set_event_loop(loop)
+
+    # Create a background task for the async function
+    loop.run_until_complete(async_email_worker(subject, recipient, email_template, attachment_path))
