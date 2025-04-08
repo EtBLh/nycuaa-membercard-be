@@ -1,5 +1,10 @@
 # created by virtualenv automatically
 *.pem
 keys
+passes/**
+passes
+icons
+pkpass_files
+.env
 __pycache__
 **/__pycache__

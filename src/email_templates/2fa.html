@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>身分驗證通知</title>
+  <style>
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background-color: #f9f9f9;
+      color: #202124;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 700px;
+      margin: auto;
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+    .code-box {
+      font-size: 28px;
+      font-weight: bold;
+      background-color: #f0f4f8;
+      padding: 15px;
+      text-align: center;
+      border-radius: 8px;
+      letter-spacing: 4px;
+      color: #1a237e;
+      margin: 20px 0;
+    }
+    .footer {
+      font-size: 13px;
+      color: #666;
+      margin-top: 40px;
+    }
+    a {
+      color: #1a73e8;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" dir="ltr">
+    <p>敬愛的會員學長姐您好：</p>
+
+    <p>您正在進行身分驗證，以下為您的一次性驗證碼（OTP），請於 10 分鐘內完成驗證：</p>
+
+    <div class="code-box">{{ code }}</div>
+
+    <p>若您未曾提出此項請求，請忽略此信件，或與我們聯絡。</p>
+
+    <p>
+      順頌<br>
+      平安<br><br>
+      國立陽明交通大學校友總會 謹上
+    </p>
+
+    <div class="footer">
+      <p>
+        <span style="color:#0000ff">
+          *本信件為系統自動生成寄出，請勿直接回覆。如有疑問，歡迎隨時 Email 至
+          <a href="mailto:email@nycuaa.org" target="_blank">email@nycuaa.org</a> 與我們聯絡。*
+        </span>
+      </p>
+      <p>
+        校友總會電子信箱｜<a href="mailto:email@nycuaa.org">email@nycuaa.org</a><br>
+        校友總會粉絲專頁｜<a href="https://www.facebook.com/nycualumni" target="_blank">https://www.facebook.com/nycualumni</a><br>
+        校友總會公務電話｜0963-794-364
+      </p>
+    </div>
+  </div>
+</body>
+</html>

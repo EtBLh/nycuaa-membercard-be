@@ -12,8 +12,13 @@ from email import encoders
 from email.message import EmailMessage
 from src import api
 from src import db
+from flask import render_template
+from jinja2 import Environment, FileSystemLoader
 
-def copy_folder(src, dest):
+from dotenv import load_dotenv
+load_dotenv()
+
+def copy_folder(src: str, dest: str) -> None:
     # Ensure the source directory exists
     if not os.path.exists(src):
         raise FileNotFoundError(f"Source directory '{src}' does not exist.")
@@ -24,7 +29,7 @@ def copy_folder(src, dest):
     except Exception as e:
         print(f"Error occurred while copying folder: {e}")
 
-def delete_folder(folder_path):
+def delete_folder(folder_path: str) -> None:
     # Ensure the directory exists
     if not os.path.exists(folder_path):
         print(f"Directory '{folder_path}' does not exist.")
@@ -37,80 +42,14 @@ def delete_folder(folder_path):
     except Exception as e:
         print(f"Error occurred while deleting folder: {e}")
 
-def move_file(src, dest):
+def move_file(src: str, dest: str) -> None:
     try:
         shutil.move(src, dest)
         print(f"File '{src}' successfully moved to '{dest}'")
     except Exception as e:
         print(f"Error occurred while moving file: {e}")
 
-def fetch_member_by_namegovid(govid, name):
-    try:
-        connection = db.pool.get_connection()
-        if connection.is_connected():
-            db_info = connection.get_server_info()
-            print(f'[+] connected to MySQL Server version {db_info}')
-            
-            cursor = connection.cursor()
-            cursor.execute("SELECT * FROM member_id WHERE govid = %s AND name = %s;", (govid, name))
-            
-            if record := cursor.fetchone():
-                # if qrcode does not exist, update DB
-                if qrcode := record[7] is None :
-                    uid = str(uuid.uuid4())
-                    cursor.execute("UPDATE member_id SET qrcode = %s WHERE govid = %s AND name = %s;", (new_qrcode, govid, name))
-                    connection.commit()
-                    record[7] = uid
-                    print(f'[+] db: member {name} does not have qrcode, created qrcode={qrcode} for member')
-
-                cursor.close()
-                connection.close()
-                return record, True
-            else:
-                print(f'[-] db: no matching data found(govid={govid}, name={name})')
-                return None, True
-    except Error as e:
-        print(f'[-] db error: {e}')
-        return None, False
-
-def fetch_member_by_qrcode(qrcode):
-    try:
-        connection = db.pool.get_connection()
-        if connection.is_connected():
-            cursor = connection.cursor()
-            cursor.execute("SELECT * FROM member_id WHERE qrcode = %s;", [qrcode])
-            
-            if record := cursor.fetchone():
-                cursor.close()
-                connection.close()
-                return record, True
-            else:
-                print(f'[-] db: no matching data found(qrcode={qrcode})')
-                return None, True
-    except Error as e:
-        print(f'[-] db error: {e}')
-        return None, False
-
-# TODO: finish this function
-def checkin_member_by_id(id):
-    try:
-        connection = db.pool.get_connection()
-        if connection.is_connected():
-            cursor = connection.cursor()
-            cursor.execute("SELECT * FROM member_id WHERE qrcode = %s;", [qrcode])
-            
-            if record := cursor.fetchone():
-                cursor.close()
-                connection.close()
-                return record, True
-            else:
-                print(f'[-] db: no matching data found(qrcode={qrcode})')
-                return None, True
-    except Error as e:
-        print(f'[-] db error: {e}')
-        return None, False
-
-def send_email_with_attachment( subject, to_email, template_path, attachment_path ):
+def send_email_with_attachment( subject: str, to_email: str, template_path: str, attachment_path: str ) -> None:
 
     from_email=os.getenv('email')
     from_email_password=os.getenv('email_pw')
@@ -147,3 +86,43 @@ def send_email_with_attachment( subject, to_email, template_path, attachment_pat
         print(f'Email sent to {to_email}')
     except Exception as e:
         print(f'Failed to send email: {e}')
+
+def send_2fa_email(subject: str, to_email: str, code: str) -> None:
+    from_email = os.getenv('email')
+    from_email_password = os.getenv('email_pw')
+
+    # 2fa content
+    template_dir = os.path.join(os.getcwd(), "src", "email_templates")
+    env = Environment(loader=FileSystemLoader(template_dir))
+    template = env.get_template("2fa.html")
+    body = template.render(code=code)
+
+    msg = MIMEText(body, 'html')
+    msg['Subject'] = subject
+    msg['From'] = from_email
+    msg['To'] = to_email
+
+    try:
+        mail_server = smtplib.SMTP('smtp.gmail.com', 587)
+        mail_server.starttls()
+        mail_server.login(from_email, from_email_password)
+        mail_server.sendmail(from_email, to_email, msg.as_string())
+        mail_server.quit()
+        print(f'2FA email sent to {to_email}')
+    except Exception as e:
+        print(f'Failed to send 2FA email: {e}')
+
+def is_icon_ext_allowed(filename: str) -> bool:
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def get_icon_name_by_govid(icon_directory: str, govid: str) -> str|None:
+    icon_filename = None
+    for ext in ['png', 'jpg', 'jpeg', 'gif']:
+        potential_filename = f"{govid}.{ext}"
+        if os.path.exists(os.path.join(icon_directory, potential_filename)):
+            return potential_filename
+    return None
+
+def pick(obj, *attrs):
+    return [getattr(obj, attr) for attr in attrs]
