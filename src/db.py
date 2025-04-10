@@ -34,3 +34,11 @@ class MemberCardIssuePermit(Base):
     member_id       = Column(String)
     expiry_date     = Column(Date)
     year            = Column(Integer)
+
+class Admin(Base):
+    __tablename__       = "admin"
+    id                  = Column(Integer, primary_key=True)
+    account             = Column(String)
+    password            = Column(Date)
+    token               = Column(String)
+    token_expiry_time   = Column(Integer)
