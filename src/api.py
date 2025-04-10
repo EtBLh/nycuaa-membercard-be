@@ -9,6 +9,7 @@ import string
 import os
 import re
 from threading import Thread
+from datetime import datetime
 
 # -----------------env var-----------------
 from dotenv import load_dotenv
@@ -111,15 +112,26 @@ def get_member_by_token():
     try:
         auth_header = request.headers.get('Authorization')
         if auth_header:
-            token = auth_header.split()[1]  # Extracts the token
+            token = auth_header.split()[1]
             member = session.query(db.Member).filter_by(token=token).first()
             if member:
-                return jsonify({
-                    'id': member.id,
-                    'name': member.name,
-                    'email': member.email,
-                    'govid': member.govid,
-                }), 200
+                permit = session.query(db.MemberCardIssuePermit).filter_by(member_id=member.id, year=datetime.now().year).first()
+                if permit:
+                    return jsonify({
+                        'id': member.id,
+                        'name': member.name,
+                        'email': member.email,
+                        'govid': member.govid,
+                        'permit': True
+                    }), 200
+                else:
+                    return jsonify({
+                        'id': member.id,
+                        'name': member.name,
+                        'email': member.email,
+                        'govid': member.govid,
+                        'permit': False
+                    }), 200
             else:
                 return jsonify({'message': 'Member not found'}), 404
         else:
@@ -295,6 +307,10 @@ def create_member_pass():
 
         if not member:
             return jsonify({'error': 'token invalid'}), 400
+        
+        permit = session.query(db.MemberCardIssuePermit).filter_by(member_id=member.id, year=datetime.now().year).first()
+        if not permit:
+            return jsonify({'error': 'no permit found'}), 403
 
         current_dir = os.getcwd()
         source_folder = os.path.join(current_dir, 'src', 'pass_template')

@@ -32,5 +32,5 @@ class MemberCardIssuePermit(Base):
     __tablename__   = "card_issue_permit"
     id              = Column(Integer, primary_key=True)
     member_id       = Column(String)
-    expiry_data     = Column(Date)
+    expiry_date     = Column(Date)
     year            = Column(Integer)
