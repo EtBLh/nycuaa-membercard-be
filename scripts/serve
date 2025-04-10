@@ -1,0 +1,4 @@
+#! /bin/bash
+
+eval $(poetry env activate)
+gunicorn --bind 127.0.0.1:5000 --workers 4 src.api:app

@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Check if Python is installed, if not, install it
+if ! command -v python3 &> /dev/null; then
+    echo "[+] Python is not installed. Installing Python..."
+    sudo apt update
+    sudo apt install python3 -y
+else
+    echo "[-] Python is already installed."
+fi
+
+# Check if Poetry is installed, if not, install it and add it to the PATH
+if ! command -v poetry &> /dev/null; then
+    echo "[+] Poetry not found. Installing Poetry..."
+    curl -sSL https://install.python-poetry.org | python3 -
+
+    # Adding Poetry to the PATH by modifying .bashrc
+    echo 'export PATH="~/.local/bin:$PATH"' >> ~/.bashrc
+    source ~/.bashrc
+else
+    echo "[-] Poetry is already installed."
+fi
+
+echo "[+] Creating directories"
+# Check and create directories if they don't exist
+for dir in ./keys ./passes ./icons ./pkpass_files; do
+    if [ -d "$dir" ]; then
+        echo "[-] Directory $dir already exists."
+    else
+        echo "[+] Creating directory $dir..."
+        mkdir "$dir"
+    fi
+done
+
+# Install project dependencies using Poetry
+poetry install
+
+echo "[+] Installation complete!"
+
