@@ -2,8 +2,8 @@
   "formatVersion" : 1,
   "passTypeIdentifier" : "pass.org.nycuaa.membercard.id3",
   "serialNumber" : "2",
-  "webServiceURL" : "https://example.com/passes/",
-  "authenticationToken" : "vxwxd7J8AlNNFPS8k0a0FfUFtq0ewzFdc",
+  "webServiceURL" : "https://membercard.nycuaa.org/",
+  "authenticationToken" : "TO_BE_FILLED",
   "teamIdentifier" : "4VB7782LS3",
   "locations" : [
     {
@@ -23,9 +23,10 @@
     }
   ],
   "barcode" : {
-    "message" : "123456789",
+    "altText": "TO_BE_FILLED",
+    "message" : "TO_BE_FILLED",
     "format" : "PKBarcodeFormatQR",
-    "messageEncoding" : "iso-8859-1"
+    "messageEncoding" : "utf-8"
   },
   "organizationName" : "NYCU AA",
   "description" : "NYCU Alumni Membership",
@@ -51,7 +52,7 @@
       {
         "key" : "level",
         "label" : "LEVEL",
-        "value" : "正式會員"
+        "value" : "TO_BE_FILLED"
       },
       {
         "key" : "Expired",
@@ -62,35 +63,19 @@
     ],
     "backFields" : [
       {
-        "numberStyle" : "PKNumberStyleSpellOut",
-        "label" : "spelled out",
-        "key" : "numberStyle",
-        "value" : 200
+        "label" : "Member ID",
+        "key" : "member_id",
+        "value" : -1
       },
       {
-        "label" : "in Reals",
-        "key" : "currency",
-        "value" : 200,
-        "currencyCode" : "BRL"
+        "label" : "email",
+        "key" : "email",
+        "value" : "TO_BE_FILLED"
       },
       {
-        "dateStyle" : "PKDateStyleFull",
-        "label" : "full date",
-        "key" : "dateFull",
-        "value" : "1980-05-07T10:00-05:00"
-      },
-      {
-        "label" : "full time",
-        "key" : "timeFull",
-        "value" : "1980-05-07T10:00-05:00",
-        "timeStyle" : "PKDateStyleFull"
-      },
-      {
-        "dateStyle" : "PKDateStyleShort",
-        "label" : "short date and time",
-        "key" : "dateTime",
-        "value" : "1980-05-07T10:00-05:00",
-        "timeStyle" : "PKDateStyleShort"
+        "label" : "NYCUAA Member Card Website",
+        "key" : "web_url",
+        "attributedValue" : "<a href='https://membercard.nycuaa.org/'>issue a new pass</a>"
       }
     ]
   }

@@ -1,15 +1,16 @@
 from flask import Flask,  request, jsonify, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-from PIL import Image, ImageFile, ExifTags
 from mysql.connector import Error
 from io import BytesIO
 import random
 import string
+import uuid
 import os
 import re
 from threading import Thread
 from datetime import datetime
+from PIL import Image, ImageFile, ExifTags
 
 # -----------------env var-----------------
 from dotenv import load_dotenv
@@ -312,39 +313,20 @@ def create_member_pass():
         if not permit:
             return jsonify({'error': 'no permit found'}), 403
 
-        current_dir = os.getcwd()
-        source_folder = os.path.join(current_dir, 'src', 'pass_template')
-        destination_folder = os.path.join(current_dir, os.getenv('passes_path'), member.govid)
-        if os.path.exists(destination_folder):
-            util.delete_folder(destination_folder)
-        util.copy_folder(source_folder, destination_folder)
+        if not member.qrcode:
+            member.qrcode = uuid.uuid4()
+            session.commit()
 
-        icon_dir = os.path.join(os.getcwd(), os.getenv('icons_path'))
-        icon_name = util.get_icon_name_by_govid(icon_dir, member.govid)
-        icon_full_path = os.path.join(icon_dir, icon_name)
-        if icon_name:
-            image = Image.open(icon_full_path)
-            file_path = os.path.join(icon_dir, icon_name)
-            #convert image to PNG
-            image.save(icon_full_path, 'PNG')
-
-            #save thumbnail
-            file_path = os.path.join(destination_folder, "thumbnail@2x.png")
-            image.thumbnail((640,640))
-            image.save(file_path, 'PNG')
-
-            #save thumbnail
-            file_path = os.path.join(destination_folder, "thumbnail.png")
-            image.thumbnail((320,320))
-            image.save(file_path, 'PNG')
-        else:
-            delete_folder(destination_folder)
-            return jsonify({'error': 'missing field: icon'}), 400
-        pkpass.newpass(member)
+        ok, message = pkpass.newpass(member, permit)
+        if not ok:
+            if message == 'icon_missing':
+                return jsonify({'error': 'missing field: icon'}), 400
+            else:
+                return jsonify({'error': 'error creating pass'}), 400
         
         dst = os.path.join(os.getcwd(), os.getenv('pkfiles_path'), member.qrcode+".pkpass")
-        email_template_path = os.path.join(os.getcwd(), 'src', 'email_templates','output.html')
         
+        email_template_path = os.path.join(os.getcwd(), 'src', 'email_templates','output.html')
         Thread(target=util.send_email_with_attachment, args=("【陽明交大校友總會】2025年度會員證—寄發信", member.email, email_template_path, dst)).start()
 
         return jsonify({"status": "success"}), 200
