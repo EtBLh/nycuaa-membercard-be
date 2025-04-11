@@ -19,14 +19,8 @@ class Member(Base):
     email           = Column(String, unique=True, nullable=False)
     type            = Column(String, nullable=True)
     qrcode          = Column(String, nullable=True)
-    token           = Column(String, unique=True)
-    otpcode         = Column(String, unique=True)
-
-class CheckInRecord(Base):
-    __tablename__   = "checkin_record"
-    id              = Column(Integer, primary_key=True)
-    member_id       = Column(String)
-    datetime        = Column(DateTime, nullable=True)
+    token           = Column(String, nullable=True)
+    otpcode         = Column(String, nullable=True)
 
 class MemberCardIssuePermit(Base):
     __tablename__   = "card_issue_permit"
@@ -39,6 +33,18 @@ class Admin(Base):
     __tablename__       = "admin"
     id                  = Column(Integer, primary_key=True)
     account             = Column(String)
-    password            = Column(Date)
-    token               = Column(String)
-    token_expiry_time   = Column(Integer)
+    password            = Column(String)
+    token               = Column(String, nullable=True)
+    token_expiry_time   = Column(Integer, nullable=True)
+
+class Conference(Base):
+    __tablename__       = "conference"
+    id                  = Column(Integer, primary_key=True)
+    name                = Column(String)
+    date                = Column(Date)
+
+class CheckInRecord(Base):
+    __tablename__   = "checkin_record"
+    member_id       = Column(String)
+    conference_id   = Column(Integer, nullable=False)
+    id              = Column(Integer, primary_key=True)
