@@ -50,8 +50,7 @@ def move_file(src: str, dest: str) -> None:
     except Exception as e:
         print(f"Error occurred while moving file: {e}")
 
-async def async_send_email_with_attachment( subject: str, to_email: str, template_path: str, attachment_path: str ) -> None:
-
+async def async_send_email_with_attachment( subject: str, to_email: str, template_path: str, attachment_path: str | None ) -> None:
     from_email=os.getenv('email')
     from_email_password=os.getenv('email_pw')
 
@@ -121,7 +120,7 @@ def get_icon_name_by_govid(icon_directory: str, govid: str) -> str|None:
     icon_filename = None
     for ext in ['png', 'jpg', 'jpeg', 'gif']:
         potential_filename = f"{govid}.{ext}"
-        if os.path.exists(os.path.join(icon_directory, potential_filename)):
+        if os.path.existssend_email_with_attachment(os.path.join(icon_directory, potential_filename)):
             return potential_filename
     return None
 

@@ -2,6 +2,7 @@ from functools import wraps
 import bcrypt
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
+from pymysql import IntegrityError
 from sqlalchemy import String, and_, cast, exists, or_
 from werkzeug.utils import secure_filename
 from mysql.connector import Error
@@ -403,8 +404,8 @@ def get_members_by_admin():
             govid = m.govid or ""
 
             # Check if file named with govid exists
-            icon_uploaded = any(govid in fname for fname in existed_icon)
-            card_created = any(govid in fname for fname in existed_card)
+            icon_uploaded = any(govid == fname.split('.')[0] for fname in existed_icon)
+            card_created = any(govid == fname for fname in existed_card)
 
             data.append({
                 'id': m.id,
@@ -433,6 +434,41 @@ def get_members_by_admin():
     finally:
         session.close()
 
+@app.route('/api/admin/member/add', methods=['POST'])
+@admin_auth_required
+def add_member():
+    data = request.get_json()
+    required_fields = ['id', 'name', 'govid', 'email']
+
+    # Check required fields
+    for field in required_fields:
+        if field not in data:
+            return jsonify({'error': f'Missing field: {field}'}), 400
+
+    session = g.session
+    try:
+        new_member = db.Member(
+            id=data['id'],
+            name=data.get('name'),
+            govid=data['govid'],
+            phone=data.get('phone'),
+            birthday=data.get('birthday'),
+            email=data['email'],
+            type=data.get('type'),
+        )
+        session.add(new_member)
+        session.commit()
+        return jsonify({'message': 'Member added successfully'}), 201
+    except IntegrityError as e:
+        session.rollback()
+        return jsonify({'error': 'govid or email already exists'}), 409
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @app.route('/api/admin/member/<string:member_id>/edit', methods=['POST'])
 @admin_auth_required
 def edit_member(member_id):
@@ -449,8 +485,7 @@ def edit_member(member_id):
 
         # Update the member's fields
         for field in [
-            "name", "govid", "phone", "birthday", "email",
-            "type", "qrcode", "token", "otpcode"
+            "name", "govid", "phone", "birthday", "email", "type"
         ]:
             if field in data:
                 setattr(member, field, data[field])
@@ -695,12 +730,11 @@ def send_invitation_letter():
 
         # Paths to the email template and attachment
         template_path = os.path.join(os.getcwd(), 'src', 'email_templates', 'invitation.html')
-        attachment_path = os.path.join(os.getcwd(), 'src', 'email_templates', 'output.html')
 
         for member in permitted_members:
             Thread(
                 target=util.send_email_with_attachment,
-                args=("【陽明交大校友總會】2025年度會員證", member.email, template_path, attachment_path)
+                args=("【陽明交大校友總會】歡迎申請 2025 年度會員證", member.email, template_path, None)
             ).start()
 
         return jsonify({
