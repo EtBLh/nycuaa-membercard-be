@@ -33,6 +33,7 @@ class Admin(Base):
     __tablename__       = "admin"
     id                  = Column(Integer, primary_key=True)
     account             = Column(String)
+    email               = Column(String)
     password            = Column(String)
     token               = Column(String, nullable=True)
     token_expiry_time   = Column(Integer, nullable=True)

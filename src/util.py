@@ -117,10 +117,9 @@ def is_icon_ext_allowed(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_icon_name_by_govid(icon_directory: str, govid: str) -> str|None:
-    icon_filename = None
     for ext in ['png', 'jpg', 'jpeg', 'gif']:
         potential_filename = f"{govid}.{ext}"
-        if os.path.existssend_email_with_attachment(os.path.join(icon_directory, potential_filename)):
+        if os.path.exists(os.path.join(icon_directory, potential_filename)):
             return potential_filename
     return None
 
