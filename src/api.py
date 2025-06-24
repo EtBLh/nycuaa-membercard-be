@@ -30,7 +30,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # flask app
 app = Flask(__name__)
-CORS(app)
+CORS(app, origin="*")
 
 # ---------------------- member api ----------------------
 
@@ -440,34 +440,48 @@ def add_member():
     data = request.get_json()
     required_fields = ['id', 'name', 'govid', 'email']
 
-    # Check required fields
-    for field in required_fields:
-        if field not in data:
-            return jsonify({'error': f'Missing field: {field}'}), 400
+    # Accept both single object and array
+    if isinstance(data, dict):
+        members_data = [data]
+    elif isinstance(data, list):
+        members_data = data
+    else:
+        return jsonify({'error': 'Invalid input format'}), 400
 
     session = g.session
+    results = []
+    for member_data in members_data:
+        # Check required fields
+        if not all(field in member_data for field in required_fields):
+            results.append({'id': member_data.get('id'), 'error': 'Missing required fields'})
+            continue
+        try:
+            new_member = db.Member(
+                id=member_data['id'],
+                name=member_data.get('name'),
+                govid=member_data['govid'],
+                phone=member_data.get('phone'),
+                birthday=member_data.get('birthday'),
+                email=member_data['email'],
+                type=member_data.get('type'),
+            )
+            session.add(new_member)
+            session.flush()  # flush to catch IntegrityError per member
+            results.append({'id': new_member.id, 'status': 'added'})
+        except IntegrityError:
+            session.rollback()
+            results.append({'id': member_data.get('id'), 'error': 'govid or email already exists'})
+        except Exception as e:
+            session.rollback()
+            results.append({'id': member_data.get('id'), 'error': str(e)})
     try:
-        new_member = db.Member(
-            id=data['id'],
-            name=data.get('name'),
-            govid=data['govid'],
-            phone=data.get('phone'),
-            birthday=data.get('birthday'),
-            email=data['email'],
-            type=data.get('type'),
-        )
-        session.add(new_member)
         session.commit()
-        return jsonify({'message': 'Member added successfully'}), 201
-    except IntegrityError as e:
-        session.rollback()
-        return jsonify({'error': 'govid or email already exists'}), 409
     except Exception as e:
         session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'Bulk commit failed: {str(e)}', 'results': results}), 500
     finally:
         session.close()
-
+    return jsonify({'results': results}), 200
 
 @app.route('/api/admin/member/<string:member_id>/edit', methods=['POST'])
 @admin_auth_required
@@ -835,3 +849,15 @@ def update_member_card_bulk():
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
+
+@app.route('/api/admin/user-info', methods=['GET'])
+@admin_auth_required
+def get_admin_user_info():
+    admin = getattr(g, 'admin', None)
+    if not admin:
+        return jsonify({'error': 'Admin not found'}), 404
+    return jsonify({
+        'id': admin.id,
+        'account': admin.account,
+        'email': admin.email
+    }), 200

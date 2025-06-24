@@ -4,6 +4,8 @@ import os
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Date
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+load_dotenv()
+
 url = f"mysql+pymysql://{os.getenv('db_user')}:{os.getenv('db_pw')}@{os.getenv('db_host')}/{os.getenv('db_database')}"
 engine = create_engine(url, pool_pre_ping=True)
 session_local = sessionmaker(bind=engine)
