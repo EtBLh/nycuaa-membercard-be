@@ -30,7 +30,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # flask app
 app = Flask(__name__)
-CORS(app, origin="*")
+CORS(app, origins="*")
 
 # ---------------------- member api ----------------------
 
