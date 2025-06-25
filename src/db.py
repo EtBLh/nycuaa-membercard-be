@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import os
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Date
+from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 load_dotenv()
@@ -51,3 +51,4 @@ class CheckInRecord(Base):
     member_id       = Column(String)
     conference_id   = Column(Integer, nullable=False)
     id              = Column(Integer, primary_key=True)
+    time            = Column(DateTime, nullable=False)

@@ -629,29 +629,23 @@ def add_conferences():
 def get_checkin_records(conference_id):
     session = g.session
     try:
-        # Join CheckInRecord and Member on member_id
+        # Join CheckInRecord with Member to get member details
         records = (
-            session.query(db.Member)
-            .join(db.CheckInRecord, db.Member.id == db.CheckInRecord.member_id)
+            session.query(db.CheckInRecord, db.Member)
+            .join(db.Member, db.CheckInRecord.member_id == db.Member.id)
             .filter(db.CheckInRecord.conference_id == conference_id)
             .all()
         )
-
-        data = [
-            {
-                "id": member.id,
+        result = []
+        for record, member in records:
+            result.append({
+                "member_id": record.member_id,
+                "time": int(record.time.timestamp()) if record.time else None,
                 "name": member.name,
-                "govid": member.govid,
-                "phone": member.phone,
-                "birthday": member.birthday,
                 "email": member.email,
-                "type": member.type,
-                "qrcode": member.qrcode
-            }
-            for member in records
-        ]
-
-        return jsonify({"members": data}), 200
+                "phone": member.phone,
+            })
+        return jsonify(result), 200
     except Exception as e:
         session.rollback()
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
@@ -677,6 +671,7 @@ def conference_check_in(conference_id):
             check_in_record = db.CheckInRecord(
                 member_id=member_data.id,
                 conference_id=conference_id,
+                time= datetime.now()
             )
             session.add(check_in_record)
             session.commit()
@@ -921,14 +916,14 @@ def send_membercards():
                 pkpass_path = os.path.join(os.getcwd(), os.getenv('pkfiles_path'), pkpass_filename)
                 Thread(
                     target=util.send_email_with_attachment,
-                    args=(f"【陽明交大校友總會】{current_year}年度會員證—寄發信", member.email, card_template, pkpass_path)
+                    args=(f"【陽明交大校友會】{current_year}年度會員證—寄發信", member.email, card_template, pkpass_path)
                 ).start()
                 successes.append({"id": member.id, "email": member.email})
             else:
                 # Send invitation
                 Thread(
                     target=util.send_email_with_attachment,
-                    args=(f"【陽明交大校友總會】歡迎申請 {current_year} 年度會員證", member.email, invitation_template, None)
+                    args=(f"【陽明交大校友會】歡迎申請 {current_year} 年度會員證", member.email, invitation_template, None)
                 ).start()
                 successes.append({"id": member.id, "email": member.email})
 
