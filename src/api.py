@@ -858,7 +858,7 @@ def update_member_card_bulk():
     finally:
         session.close()
 
-@app.route('/api/admin/send-membercards', methods=['POST'])
+@app.route('/api/admin/send-member-card', methods=['POST'])
 @admin_auth_required
 def send_membercards():
     session = g.session
@@ -896,8 +896,7 @@ def send_membercards():
         invitation_template = os.path.join(os.getcwd(), 'src', 'email_templates', 'invitation.html')
         card_template = os.path.join(os.getcwd(), 'src', 'email_templates', 'output.html')
 
-        sent_cards = []
-        sent_invitations = []
+        successes = []
         skipped = []
         errors = []
 
@@ -905,7 +904,7 @@ def send_membercards():
             member = members_by_id[member_id]
             permit = permits_by_member_id.get(member_id)
             if not permit:
-                skipped.append({"member": member.name, "reason": "No permit"})
+                skipped.append({"id": member.id, "reason": "No permit"})
                 continue
 
             has_icon = any(member.govid in fname for fname in existed_icon)
@@ -924,19 +923,18 @@ def send_membercards():
                     target=util.send_email_with_attachment,
                     args=(f"【陽明交大校友總會】{current_year}年度會員證—寄發信", member.email, card_template, pkpass_path)
                 ).start()
-                sent_cards.append({"member": member.name, "email": member.email})
+                successes.append({"id": member.id, "email": member.email})
             else:
                 # Send invitation
                 Thread(
                     target=util.send_email_with_attachment,
                     args=(f"【陽明交大校友總會】歡迎申請 {current_year} 年度會員證", member.email, invitation_template, None)
                 ).start()
-                sent_invitations.append({"member": member.name, "email": member.email})
+                successes.append({"id": member.id, "email": member.email})
 
         return jsonify({
             "status": "completed",
-            "sent_cards": sent_cards,
-            "sent_invitations": sent_invitations,
+            "successes": successes,
             "skipped": skipped,
             "errors": errors
         }), 200
@@ -958,3 +956,77 @@ def get_admin_user_info():
         'account': admin.account,
         'email': admin.email
     }), 200
+
+@app.route('/api/admin/member/<string:member_id>', methods=['DELETE'])
+@admin_auth_required
+def delete_member(member_id):
+    session = g.session
+    try:
+        member = session.query(db.Member).filter_by(id=member_id).first()
+        if not member:
+            return jsonify({"error": f"Member with id {member_id} not found"}), 404
+
+        session.delete(member)
+        session.commit()
+        return jsonify({"message": f"Member {member_id} deleted successfully"}), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
+
+@app.route('/api/admin/send-member-card/preview', methods=['POST'])
+@admin_auth_required
+def preview_send_membercards():
+    session = g.session
+    try:
+        data = request.get_json()
+        if not data or "member_ids" not in data or not isinstance(data["member_ids"], list):
+            return jsonify({"error": "'member_ids' must be a list of strings"}), 400
+
+        member_ids = data["member_ids"]
+        current_year = datetime.now().year
+
+        # Load all members
+        members = session.query(db.Member).filter(db.Member.id.in_(member_ids)).all()
+        members_by_id = {m.id: m for m in members}
+
+        # Load permits
+        permits = (
+            session.query(db.MemberCardIssuePermit)
+            .filter(db.MemberCardIssuePermit.member_id.in_(member_ids))
+            .filter(db.MemberCardIssuePermit.year == current_year)
+            .all()
+        )
+        permits_by_member_id = {p.member_id: p for p in permits}
+
+        # Load icons
+        icon_dir = os.path.join(os.getcwd(), os.getenv('icons_path'))
+        existed_icon = set(os.listdir(icon_dir)) if os.path.exists(icon_dir) else set()
+
+        preview_list = []
+        for member_id in member_ids:
+            member = members_by_id.get(member_id)
+            if not member:
+                continue
+            permit = permits_by_member_id.get(member_id)
+            has_permit = permit is not None
+            has_icon = any(member.govid in fname for fname in existed_icon)
+            if not has_permit:
+                email_type = 'invalid'
+            else:
+                email_type = 'update_card' if has_icon else 'invitation'
+            preview_list.append({
+                "id": member.id,
+                "name": member.name,
+                "permit": has_permit,
+                "email_type": email_type
+            })
+
+        return jsonify(preview_list), 200
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
