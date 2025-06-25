@@ -513,9 +513,9 @@ def edit_member(member_id):
     finally:
         session.close()
 
-@app.route('/api/admin/member/<string:member_id>/set-paid', methods=['POST'])
+@app.route('/api/admin/member/<string:member_ids>/set-paid', methods=['POST'])
 @admin_auth_required
-def set_paid_status(member_id):
+def set_paid_status(member_ids):
     session = g.session
     try:
         data = request.get_json()
@@ -525,34 +525,42 @@ def set_paid_status(member_id):
         paid = data["paid"]
         current_year = datetime.today().year
 
-        permit = (
-            session.query(db.MemberCardIssuePermit)
-            .filter_by(member_id=member_id, year=current_year)
-            .first()
-        )
+        # Split member_ids by comma and remove whitespace
+        member_id_list = [mid.strip() for mid in member_ids.split(',') if mid.strip()]
+        if not member_id_list:
+            return jsonify({"error": "No valid member_id(s) provided"}), 400
 
-        if paid:
-            if not permit:
-                # Create a new permit for the year
-                expiry_date = datetime(current_year + 1, 1, 1) - timedelta(days=1)
-                new_permit = db.MemberCardIssuePermit(
-                    member_id=member_id,
-                    expiry_date=expiry_date.date(),
-                    year=current_year
-                )
-                session.add(new_permit)
-                message = "Permit created (paid set)."
+        results = []
+        for member_id in member_id_list:
+            permit = (
+                session.query(db.MemberCardIssuePermit)
+                .filter_by(member_id=member_id, year=current_year)
+                .first()
+            )
+
+            if paid:
+                if not permit:
+                    # Create a new permit for the year
+                    expiry_date = datetime(current_year + 1, 1, 1) - timedelta(days=1)
+                    new_permit = db.MemberCardIssuePermit(
+                        member_id=member_id,
+                        expiry_date=expiry_date.date(),
+                        year=current_year
+                    )
+                    session.add(new_permit)
+                    message = "Permit created (paid set)."
+                else:
+                    message = "Permit already exists (paid already set)."
             else:
-                message = "Permit already exists (paid already set)."
-        else:
-            if permit:
-                session.delete(permit)
-                message = "Permit deleted (paid unset)."
-            else:
-                message = "No permit to delete (paid already unset)."
+                if permit:
+                    session.delete(permit)
+                    message = "Permit deleted (paid unset)."
+                else:
+                    message = "No permit to delete (paid already unset)."
+            results.append({"member_id": member_id, "message": message})
 
         session.commit()
-        return jsonify({"message": message}), 200
+        return jsonify({"results": results}), 200
 
     except Exception as e:
         session.rollback()
@@ -748,7 +756,7 @@ def send_invitation_letter():
         for member in permitted_members:
             Thread(
                 target=util.send_email_with_attachment,
-                args=("【陽明交大校友總會】歡迎申請 2025 年度會員證", member.email, template_path, None)
+                args=(f"【陽明交大校友總會】歡迎申請 {current_year} 年度會員證", member.email, template_path, None)
             ).start()
 
         return jsonify({
@@ -831,7 +839,7 @@ def update_member_card_bulk():
 
             Thread(
                 target=util.send_email_with_attachment,
-                args=("【陽明交大校友總會】2025年度會員證—寄發信", member.email, email_template_path, pkpass_path)
+                args=(f"【陽明交大校友總會】{current_year}年度會員證—寄發信", member.email, email_template_path, pkpass_path)
             ).start()
 
             success_list.append({"member": member.name, "email": member.email})
@@ -842,6 +850,95 @@ def update_member_card_bulk():
             "failed_count": len(error_list),
             "sent": success_list,
             "errors": error_list
+        }), 200
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
+
+@app.route('/api/admin/send-membercards', methods=['POST'])
+@admin_auth_required
+def send_membercards():
+    session = g.session
+    try:
+        data = request.get_json()
+        if not data or "member_ids" not in data or not isinstance(data["member_ids"], list):
+            return jsonify({"error": "'member_ids' must be a list of strings"}), 400
+
+        member_ids = data["member_ids"]
+        current_year = datetime.now().year
+
+        # Load all members
+        members = session.query(db.Member).filter(db.Member.id.in_(member_ids)).all()
+        members_by_id = {m.id: m for m in members}
+
+        # Check for missing members
+        missing_ids = set(member_ids) - set(members_by_id.keys())
+        if missing_ids:
+            return jsonify({"error": f"Member(s) not found: {', '.join(missing_ids)}"}), 404
+
+        # Load permits
+        permits = (
+            session.query(db.MemberCardIssuePermit)
+            .filter(db.MemberCardIssuePermit.member_id.in_(member_ids))
+            .filter(db.MemberCardIssuePermit.year == current_year)
+            .all()
+        )
+        permits_by_member_id = {p.member_id: p for p in permits}
+
+        # Load icons
+        icon_dir = os.path.join(os.getcwd(), os.getenv('icons_path'))
+        existed_icon = set(os.listdir(icon_dir)) if os.path.exists(icon_dir) else set()
+
+        # Prepare email templates
+        invitation_template = os.path.join(os.getcwd(), 'src', 'email_templates', 'invitation.html')
+        card_template = os.path.join(os.getcwd(), 'src', 'email_templates', 'output.html')
+
+        sent_cards = []
+        sent_invitations = []
+        skipped = []
+        errors = []
+
+        for member_id in member_ids:
+            member = members_by_id[member_id]
+            permit = permits_by_member_id.get(member_id)
+            if not permit:
+                skipped.append({"member": member.name, "reason": "No permit"})
+                continue
+
+            has_icon = any(member.govid in fname for fname in existed_icon)
+            if has_icon:
+                # Send member card
+                if not member.qrcode:
+                    member.qrcode = str(uuid.uuid4())
+                    session.commit()
+                ok, message = pkpass.newpass(member, permit)
+                if not ok:
+                    errors.append({"member": member.name, "error": message})
+                    continue
+                pkpass_filename = f"{member.qrcode}.pkpass"
+                pkpass_path = os.path.join(os.getcwd(), os.getenv('pkfiles_path'), pkpass_filename)
+                Thread(
+                    target=util.send_email_with_attachment,
+                    args=(f"【陽明交大校友總會】{current_year}年度會員證—寄發信", member.email, card_template, pkpass_path)
+                ).start()
+                sent_cards.append({"member": member.name, "email": member.email})
+            else:
+                # Send invitation
+                Thread(
+                    target=util.send_email_with_attachment,
+                    args=(f"【陽明交大校友總會】歡迎申請 {current_year} 年度會員證", member.email, invitation_template, None)
+                ).start()
+                sent_invitations.append({"member": member.name, "email": member.email})
+
+        return jsonify({
+            "status": "completed",
+            "sent_cards": sent_cards,
+            "sent_invitations": sent_invitations,
+            "skipped": skipped,
+            "errors": errors
         }), 200
 
     except Exception as e:
