@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import os
 
-from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime, Boolean, Enum
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 load_dotenv()
@@ -13,7 +13,7 @@ Base = declarative_base()
 
 class Member(Base):
     __tablename__   = 'member_id'
-    id              = Column(String, primary_key=True)
+    id              = Column(Integer, primary_key=True)
     name            = Column(String, nullable=True)
     govid           = Column(String, unique=True, nullable=False)
     phone           = Column(String, nullable=True)
@@ -27,7 +27,7 @@ class Member(Base):
 class MemberCardIssuePermit(Base):
     __tablename__   = "card_issue_permit"
     id              = Column(Integer, primary_key=True)
-    member_id       = Column(String)
+    member_id       = Column(Integer)
     expiry_date     = Column(Date)
     year            = Column(Integer)
 
@@ -48,7 +48,16 @@ class Conference(Base):
 
 class CheckInRecord(Base):
     __tablename__   = "checkin_record"
-    member_id       = Column(String)
+    member_id       = Column(Integer)
     conference_id   = Column(Integer, nullable=False)
     id              = Column(Integer, primary_key=True)
     time            = Column(DateTime, nullable=False)
+
+class Log(Base):
+    __tablename__   = "log"
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    initiator_type  = Column(Enum('admin', 'member', name='initiator_type_enum'), nullable=False)
+    initiator       = Column(Integer, nullable=False)
+    is_success      = Column(Boolean, nullable=False)
+    message         = Column(String(100), nullable=False)
+    event_type      = Column(Enum('create_admin', 'delete_admin', 'modify_admin', 'add_member', 'modify_member', 'delete_member', 'issue_membercard', 'send_invitation_email', name='event_type_enum'), nullable=False)

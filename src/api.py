@@ -3,7 +3,7 @@ import bcrypt
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from pymysql import IntegrityError
-from sqlalchemy import String, and_, cast, exists, or_
+from sqlalchemy import String, and_, exists, or_
 from werkzeug.utils import secure_filename
 from mysql.connector import Error
 from io import BytesIO
@@ -347,6 +347,7 @@ def get_members_by_admin():
         filter_status = request.args.get('status')
         filter_type = request.args.get('type')
         search_term = request.args.get('search', '').strip()
+        id_filter = request.args.get('ids', '').strip()
         current_year = datetime.now().year
 
         # Load file names from icon and card directories
@@ -361,6 +362,15 @@ def get_members_by_admin():
 
         query = session.query(db.Member)
 
+        # Apply ID filter if provided
+        if id_filter:
+            try:
+                id_list = [int(id_str.strip()) for id_str in id_filter.split(',') if id_str.strip()]
+                if id_list:
+                    query = query.filter(db.Member.id.in_(id_list))
+            except ValueError:
+                return jsonify({"error": "All IDs must be valid integers"}), 400
+
         # Apply filter
         if filter_status == 'paid':
             query = query.filter(db.Member.id.in_(permit_subq))
@@ -373,11 +383,20 @@ def get_members_by_admin():
         # Apply search
         if search_term:
             like_term = f"%{search_term}%"
-            query = query.filter(or_(
-                db.Member.name.ilike(like_term),
-                db.Member.govid.ilike(like_term),
-                cast(db.Member.id, String).ilike(like_term)
-            ))
+            # Try to parse search_term as integer for ID search
+            try:
+                search_id = int(search_term)
+                query = query.filter(or_(
+                    db.Member.name.ilike(like_term),
+                    db.Member.govid.ilike(like_term),
+                    db.Member.id == search_id
+                ))
+            except ValueError:
+                # If not a valid integer, only search by name and govid
+                query = query.filter(or_(
+                    db.Member.name.ilike(like_term),
+                    db.Member.govid.ilike(like_term)
+                ))
 
         total = query.count()
 
@@ -483,7 +502,7 @@ def add_member():
         session.close()
     return jsonify({'results': results}), 200
 
-@app.route('/api/admin/member/<string:member_id>/edit', methods=['POST'])
+@app.route('/api/admin/member/<int:member_id>/edit', methods=['POST'])
 @admin_auth_required
 def edit_member(member_id):
     session = g.session
@@ -525,8 +544,12 @@ def set_paid_status(member_ids):
         paid = data["paid"]
         current_year = datetime.today().year
 
-        # Split member_ids by comma and remove whitespace
-        member_id_list = [mid.strip() for mid in member_ids.split(',') if mid.strip()]
+        # Split member_ids by comma and remove whitespace, convert to integers
+        try:
+            member_id_list = [int(mid.strip()) for mid in member_ids.split(',') if mid.strip()]
+        except ValueError:
+            return jsonify({"error": "All member_ids must be valid integers"}), 400
+        
         if not member_id_list:
             return jsonify({"error": "No valid member_id(s) provided"}), 400
 
@@ -724,7 +747,7 @@ def send_invitation_letter():
     try:
         data = request.get_json()
         if not data or "member_ids" not in data or not isinstance(data["member_ids"], list):
-            return jsonify({"error": "'member_ids' must be a list of strings"}), 400
+            return jsonify({"error": "'member_ids' must be a list of integers"}), 400
 
         member_ids = data["member_ids"]
         current_year = datetime.today().year
@@ -772,7 +795,7 @@ def update_member_card_bulk():
     try:
         data = request.get_json()
         if not data or "member_ids" not in data or not isinstance(data["member_ids"], list):
-            return jsonify({"error": "'member_ids' must be a list of strings"}), 400
+            return jsonify({"error": "'member_ids' must be a list of integers"}), 400
 
         member_ids = data["member_ids"]
         current_year = datetime.now().year
@@ -860,7 +883,7 @@ def send_membercards():
     try:
         data = request.get_json()
         if not data or "member_ids" not in data or not isinstance(data["member_ids"], list):
-            return jsonify({"error": "'member_ids' must be a list of strings"}), 400
+            return jsonify({"error": "'member_ids' must be a list of integers"}), 400
 
         member_ids = data["member_ids"]
         current_year = datetime.now().year
@@ -952,7 +975,7 @@ def get_admin_user_info():
         'email': admin.email
     }), 200
 
-@app.route('/api/admin/member/<string:member_id>', methods=['DELETE'])
+@app.route('/api/admin/member/<int:member_id>', methods=['DELETE'])
 @admin_auth_required
 def delete_member(member_id):
     session = g.session
@@ -977,7 +1000,7 @@ def preview_send_membercards():
     try:
         data = request.get_json()
         if not data or "member_ids" not in data or not isinstance(data["member_ids"], list):
-            return jsonify({"error": "'member_ids' must be a list of strings"}), 400
+            return jsonify({"error": "'member_ids' must be a list of integers"}), 400
 
         member_ids = data["member_ids"]
         current_year = datetime.now().year

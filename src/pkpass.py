@@ -81,14 +81,14 @@ def newpass(member: db.Member, permit: db.MemberCardIssuePermit):
     data['serialNumber'] = govid
     data['authenticationToken'] = qrcode
     data['barcode']['message'] = qrcode
-    data['barcode']['altText'] = id
+    data['barcode']['altText'] = str(id)
 
     data['generic']['primaryFields'][0]['value'] = name
     data['generic']['secondaryFields'][0]['value'] = "20" + str(id)[:2]
     data['generic']['auxiliaryFields'][0]['value'] = permit.expiry_date.strftime("%Y/%m/%d")
     
     # back field
-    data['generic']['backFields'][0]['value'] = id # member id
+    data['generic']['backFields'][0]['value'] = str(id) # member id
     data['generic']['backFields'][1]['value'] = email
 
     if type == 'founding':
