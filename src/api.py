@@ -86,6 +86,9 @@ def login():
         # Send the OTP code via email
         util.send_2fa_email("【陽明交大校友總會】會員證系統—驗證碼", user.email, code)
 
+        # Log the action
+        util.log_action(session, 'member', user.id, 'member_login_request', True, f"Login OTP sent to {user.email}")
+
         # Censor the account name 
         censored_email = re.sub(r'^([^@]{3})([^@]*)@', lambda m: m.group(1) + '*' * len(m.group(2)) + '@', user.email)
 
@@ -122,6 +125,9 @@ def otp_verify():
         member.token = token
         member.otpcode = ''
         session.commit()
+
+        # Log successful login
+        util.log_action(session, 'member', member.id, 'member_login_success', True, f"Member {member.name} logged in successfully")
 
         return jsonify({
             "token": token,
@@ -220,6 +226,10 @@ def upload_member_icon():
     img.thumbnail((1024,1024)) # Resize img to save disk space
     img.save(filepath, 'PNG')  # Save as PNG format
 
+    # Log the action
+    session = getattr(g, 'session', None)
+    util.log_action(session, 'member', member.id, 'member_upload_icon', True, f"Member {member.name} uploaded icon")
+
     return jsonify({'message': 'Icon uploaded successfully'}), 200
 
 # get user icon
@@ -256,6 +266,7 @@ def create_member_pass():
 
     ok, message = pkpass.newpass(member, permit)
     if not ok:
+        util.log_action(session, 'member', member.id, 'issue_membercard', False, f"Failed to create pass: {message}")
         if message == 'icon_missing':
             return jsonify({'error': 'missing field: icon'}), 400
         else:
@@ -265,6 +276,9 @@ def create_member_pass():
     
     email_template_path = os.path.join(os.getcwd(), 'src', 'email_templates','output.html')
     Thread(target=util.send_email_with_attachment, args=("【陽明交大校友總會】2025年度會員證—寄發信", member.email, email_template_path, dst)).start()
+
+    # Log successful pass creation
+    util.log_action(session, 'member', member.id, 'issue_membercard', True, f"Member {member.name} created member card")
 
     return jsonify({"status": "success"}), 200
 
@@ -440,6 +454,11 @@ def get_members_by_admin():
                 'card_created': card_created
             })
 
+        # Log get members action
+        admin = getattr(g, 'admin', None)
+        filter_desc = f"status={filter_status}, type={filter_type}, search='{search_term}', ids='{id_filter}'" if any([filter_status, filter_type, search_term, id_filter]) else "no filters"
+        util.log_action(session, 'admin', admin.id, 'admin_get_members', True, f"Admin {admin.account} retrieved {len(data)} members with filters: {filter_desc}")
+
         return jsonify({
             'total': total,
             'page': page,
@@ -487,12 +506,21 @@ def add_member():
             session.add(new_member)
             session.flush()  # flush to catch IntegrityError per member
             results.append({'id': new_member.id, 'status': 'added'})
+            # Log successful member addition
+            admin = getattr(g, 'admin', None)
+            util.log_action(session, 'admin', admin.id, 'add_member', True, f"Admin {admin.account} added member {new_member.name}")
         except IntegrityError:
             session.rollback()
             results.append({'id': member_data.get('id'), 'error': 'govid or email already exists'})
+            # Log failed member addition
+            admin = getattr(g, 'admin', None)
+            util.log_action(session, 'admin', admin.id, 'add_member', False, f"Failed to add member {member_data.get('name', 'Unknown')}: govid or email already exists")
         except Exception as e:
             session.rollback()
             results.append({'id': member_data.get('id'), 'error': str(e)})
+            # Log failed member addition
+            admin = getattr(g, 'admin', None)
+            util.log_action(session, 'admin', admin.id, 'add_member', False, f"Failed to add member {member_data.get('name', 'Unknown')}: {str(e)}")
     try:
         session.commit()
     except Exception as e:
@@ -525,9 +553,16 @@ def edit_member(member_id):
 
         session.commit()
 
+        # Log successful member update
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'modify_member', True, f"Admin {admin.account} updated member {member.name}")
+
         return jsonify({"message": f"Member {member_id} updated successfully"}), 200
     except Exception as e:
         session.rollback()
+        # Log failed member update
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'modify_member', False, f"Failed to update member {member_id}: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
@@ -583,10 +618,19 @@ def set_paid_status(member_ids):
             results.append({"member_id": member_id, "message": message})
 
         session.commit()
+        
+        # Log the paid status update
+        admin = getattr(g, 'admin', None)
+        action_desc = "set paid status" if paid else "unset paid status"
+        util.log_action(session, 'admin', admin.id, 'admin_set_paid_status', True, f"Admin {admin.account} {action_desc} for {len(member_id_list)} members")
+        
         return jsonify({"results": results}), 200
 
     except Exception as e:
         session.rollback()
+        # Log failed paid status update
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_set_paid_status', False, f"Failed to update paid status: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
@@ -640,9 +684,16 @@ def add_conferences():
         session.add(new_conf)
         session.commit()
 
+        # Log successful conference creation
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_create_conference', True, f"Admin {admin.account} created conference '{name}' for {date_str}")
+
         return jsonify({"success": True, "id": new_conf.id}), 201
     except Exception as e:
         session.rollback()
+        # Log failed conference creation
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_create_conference', False, f"Failed to create conference: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
@@ -698,8 +749,16 @@ def conference_check_in(conference_id):
             )
             session.add(check_in_record)
             session.commit()
+            
+            # Log successful check-in
+            admin = getattr(g, 'admin', None)
+            util.log_action(session, 'admin', admin.id, 'admin_checkin', True, f"Admin {admin.account} checked in member {member_data.name} for conference {conference_id}")
+            
             return jsonify({'name': member_data.name, 'message': 'Check-in successful'}), 200
         else:
+            # Log failed check-in attempt
+            admin = getattr(g, 'admin', None)
+            util.log_action(session, 'admin', admin.id, 'admin_checkin', False, f"Failed check-in: No member found with QR code {qrcode}")
             return jsonify({'message': f'No member found with the provided QR code: {qrcode}'}), 404
     except Exception as e:
         session.rollback()
@@ -732,6 +791,9 @@ def admin_login():
         admin.token_expiry_time = int(time.time()) + 60 * 60
 
         session.commit()
+
+        # Log successful admin login
+        util.log_action(session, 'admin', admin.id, 'admin_login', True, f"Admin {admin.account} logged in successfully")
 
         return jsonify({"success": True, "token": token }), 200
     except Exception as e:
@@ -777,6 +839,10 @@ def send_invitation_letter():
                 args=(f"【陽明交大校友總會】歡迎申請 {current_year} 年度會員證", member.email, template_path, None)
             ).start()
 
+        # Log invitation email sending
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'send_invitation_email', True, f"Admin {admin.account} sent invitation emails to {len(permitted_members)} members")
+
         return jsonify({
             "message": f"Invitation letters are being sent to {len(permitted_members)} member(s).",
             "sent_to": [m.email for m in permitted_members]
@@ -784,6 +850,9 @@ def send_invitation_letter():
 
     except Exception as e:
         session.rollback()
+        # Log failed invitation email sending
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'send_invitation_email', False, f"Failed to send invitation emails: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
@@ -862,6 +931,10 @@ def update_member_card_bulk():
 
             success_list.append({"member": member.name, "email": member.email})
 
+        # Log update member card bulk action
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_update_member_card', True, f"Admin {admin.account} updated member cards for {len(success_list)} members, {len(error_list)} failed")
+
         return jsonify({
             "status": "completed",
             "success_count": len(success_list),
@@ -872,6 +945,9 @@ def update_member_card_bulk():
 
     except Exception as e:
         session.rollback()
+        # Log failed update member card bulk action
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_update_member_card', False, f"Failed to update member cards: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
@@ -950,6 +1026,10 @@ def send_membercards():
                 ).start()
                 successes.append({"id": member.id, "email": member.email})
 
+        # Log send member card action
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_send_member_card', True, f"Admin {admin.account} sent member cards/invitations to {len(successes)} members, {len(skipped)} skipped, {len(errors)} errors")
+
         return jsonify({
             "status": "completed",
             "successes": successes,
@@ -959,6 +1039,9 @@ def send_membercards():
 
     except Exception as e:
         session.rollback()
+        # Log failed send member card action
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_send_member_card', False, f"Failed to send member cards: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
@@ -984,11 +1067,20 @@ def delete_member(member_id):
         if not member:
             return jsonify({"error": f"Member with id {member_id} not found"}), 404
 
+        member_name = member.name  # Store name before deletion
         session.delete(member)
         session.commit()
+        
+        # Log successful member deletion
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'delete_member', True, f"Admin {admin.account} deleted member {member_name}")
+        
         return jsonify({"message": f"Member {member_id} deleted successfully"}), 200
     except Exception as e:
         session.rollback()
+        # Log failed member deletion
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'delete_member', False, f"Failed to delete member {member_id}: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
@@ -1042,6 +1134,60 @@ def preview_send_membercards():
             })
 
         return jsonify(preview_list), 200
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
+
+@app.route('/api/admin/logs', methods=['GET'])
+@admin_auth_required
+def get_logs():
+    session = g.session
+    try:
+        page_size = int(request.args.get('pagesize', 50))
+        page = int(request.args.get('page', 0))
+        event_type_filter = request.args.get('event_type')
+        initiator_type_filter = request.args.get('initiator_type')
+        is_success_filter = request.args.get('is_success')
+
+        query = session.query(db.Log).order_by(db.Log.timestamp.desc())
+
+        # Apply filters
+        if event_type_filter:
+            query = query.filter(db.Log.event_type == event_type_filter)
+        if initiator_type_filter:
+            query = query.filter(db.Log.initiator_type == initiator_type_filter)
+        if is_success_filter is not None:
+            is_success_bool = is_success_filter.lower() == 'true'
+            query = query.filter(db.Log.is_success == is_success_bool)
+
+        total = query.count()
+        logs = query.offset(page * page_size).limit(page_size).all()
+
+        data = []
+        for log in logs:
+            data.append({
+                'id': log.id,
+                'initiator_type': log.initiator_type,
+                'initiator': log.initiator,
+                'event_type': log.event_type,
+                'is_success': log.is_success,
+                'message': log.message,
+                'timestamp': log.timestamp.isoformat() if log.timestamp else None
+            })
+
+        # Log the get logs action
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_get_logs', True, f"Admin {admin.account} retrieved {len(data)} logs")
+
+        return jsonify({
+            'total': total,
+            'page': page,
+            'pagesize': page_size,
+            'logs': data
+        }), 200
 
     except Exception as e:
         session.rollback()

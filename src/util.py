@@ -11,13 +11,38 @@ from email.mime.base import MIMEBase
 from email.mime.application import MIMEApplication
 from email import encoders
 from email.message import EmailMessage
-from src import api
-from src import db
 from flask import render_template
 from jinja2 import Environment, FileSystemLoader
 
 from dotenv import load_dotenv
 load_dotenv()
+
+def log_action(session, initiator_type: str, initiator_id: int, event_type: str, is_success: bool, message: str):
+    """
+    Log an action to the database
+    
+    Args:
+        session: Database session
+        initiator_type: 'admin' or 'member'
+        initiator_id: ID of the admin or member performing the action
+        event_type: Type of event (create_admin, delete_admin, etc.)
+        is_success: Whether the action was successful
+        message: Description of the action
+    """
+    try:
+        from src import db  # Import here to avoid circular import
+        log_entry = db.Log(
+            initiator_type=initiator_type,
+            initiator=initiator_id,
+            event_type=event_type,
+            is_success=is_success,
+            message=message
+        )
+        session.add(log_entry)
+        session.commit()
+    except Exception as e:
+        print(f"Failed to log action: {e}")
+        # Don't raise the exception to avoid breaking the main functionality
 
 def copy_folder(src: str, dest: str) -> None:
     # Ensure the source directory exists
@@ -77,7 +102,7 @@ async def async_send_email_with_attachment( subject: str, to_email: str, templat
             f'attachment; filename={file_name}',
         )
         msg.attach(part)
-        # Connect to the SMTP server and send the email
+    # Connect to the SMTP server and send the email
     try:
         mail_server = smtplib.SMTP('smtp.gmail.com', 587)
         mail_server.starttls()
