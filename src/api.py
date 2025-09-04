@@ -457,7 +457,6 @@ def get_members_by_admin():
         # Log get members action
         admin = getattr(g, 'admin', None)
         filter_desc = f"status={filter_status}, type={filter_type}, search='{search_term}', ids='{id_filter}'" if any([filter_status, filter_type, search_term, id_filter]) else "no filters"
-        util.log_action(session, 'admin', admin.id, 'admin_get_members', True, f"Admin {admin.account} retrieved {len(data)} members with filters: {filter_desc}")
 
         return jsonify({
             'total': total,
@@ -752,13 +751,11 @@ def conference_check_in(conference_id):
             
             # Log successful check-in
             admin = getattr(g, 'admin', None)
-            util.log_action(session, 'admin', admin.id, 'admin_checkin', True, f"Admin {admin.account} checked in member {member_data.name} for conference {conference_id}")
             
             return jsonify({'name': member_data.name, 'message': 'Check-in successful'}), 200
         else:
             # Log failed check-in attempt
             admin = getattr(g, 'admin', None)
-            util.log_action(session, 'admin', admin.id, 'admin_checkin', False, f"Failed check-in: No member found with QR code {qrcode}")
             return jsonify({'message': f'No member found with the provided QR code: {qrcode}'}), 404
     except Exception as e:
         session.rollback()
@@ -1180,7 +1177,6 @@ def get_logs():
 
         # Log the get logs action
         admin = getattr(g, 'admin', None)
-        util.log_action(session, 'admin', admin.id, 'admin_get_logs', True, f"Admin {admin.account} retrieved {len(data)} logs")
 
         return jsonify({
             'total': total,

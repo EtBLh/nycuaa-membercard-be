@@ -10,6 +10,7 @@ load_dotenv()
 url = f"mysql+pymysql://{os.getenv('db_user')}:{os.getenv('db_pw')}@{os.getenv('db_host')}/{os.getenv('db_database')}"
 engine = create_engine(url, pool_pre_ping=True)
 session_local = sessionmaker(bind=engine)
+print('[+] db connected')
 Base = declarative_base()
 
 class Member(Base):
@@ -61,5 +62,5 @@ class Log(Base):
     initiator       = Column(Integer, nullable=False)
     is_success      = Column(Boolean, nullable=False)
     message         = Column(String(100), nullable=False)
-    event_type      = Column(Enum('create_admin', 'delete_admin', 'modify_admin', 'add_member', 'modify_member', 'delete_member', 'issue_membercard', 'send_invitation_email', 'member_login_request', 'member_login_success', 'member_upload_icon', 'admin_login', 'admin_get_members', 'admin_set_paid_status', 'admin_create_conference', 'admin_checkin', 'admin_get_conferences', 'admin_send_member_card', 'admin_update_member_card', 'admin_get_logs', name='event_type_enum'), nullable=False)
+    event_type      = Column(Enum('create_admin', 'delete_admin', 'modify_admin', 'add_member', 'modify_member', 'delete_member', 'issue_membercard', 'send_invitation_email', 'member_login_request', 'member_login_success', 'member_upload_icon', 'admin_login', 'admin_set_paid_status', 'admin_create_conference', 'admin_send_member_card', 'admin_update_member_card', name='event_type_enum'), nullable=False)
     timestamp       = Column(DateTime, nullable=False, default=datetime.now)
