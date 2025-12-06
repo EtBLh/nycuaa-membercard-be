@@ -578,6 +578,16 @@ def set_paid_status(member_ids):
         paid = data["paid"]
         current_year = datetime.today().year
 
+        # Optional target year override
+        target_year = current_year
+        if "year" in data and data.get("year") is not None:
+            try:
+                target_year = int(data.get("year"))
+            except (TypeError, ValueError):
+                return jsonify({"error": "'year' must be an integer"}), 400
+            if target_year < 1900 or target_year > 3000:
+                return jsonify({"error": "'year' out of supported range"}), 400
+
         # Split member_ids by comma and remove whitespace, convert to integers
         try:
             member_id_list = [int(mid.strip()) for mid in member_ids.split(',') if mid.strip()]
@@ -591,18 +601,18 @@ def set_paid_status(member_ids):
         for member_id in member_id_list:
             permit = (
                 session.query(db.MemberCardIssuePermit)
-                .filter_by(member_id=member_id, year=current_year)
+                .filter_by(member_id=member_id, year=target_year)
                 .first()
             )
 
             if paid:
                 if not permit:
                     # Create a new permit for the year
-                    expiry_date = datetime(current_year + 1, 1, 1) - timedelta(days=1)
+                    expiry_date = datetime(target_year + 1, 1, 1) - timedelta(days=1)
                     new_permit = db.MemberCardIssuePermit(
                         member_id=member_id,
                         expiry_date=expiry_date.date(),
-                        year=current_year
+                        year=target_year
                     )
                     session.add(new_permit)
                     message = "Permit created (paid set)."
@@ -621,7 +631,7 @@ def set_paid_status(member_ids):
         # Log the paid status update
         admin = getattr(g, 'admin', None)
         action_desc = "set paid status" if paid else "unset paid status"
-        util.log_action(session, 'admin', admin.id, 'admin_set_paid_status', True, f"Admin {admin.account} {action_desc} for {len(member_id_list)} members")
+        util.log_action(session, 'admin', admin.id, 'admin_set_paid_status', True, f"Admin {admin.account} {action_desc} for {len(member_id_list)} members (year={target_year})")
         
         return jsonify({"results": results}), 200
 
@@ -630,6 +640,24 @@ def set_paid_status(member_ids):
         # Log failed paid status update
         admin = getattr(g, 'admin', None)
         util.log_action(session, 'admin', admin.id, 'admin_set_paid_status', False, f"Failed to update paid status: {str(e)}")
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
+
+@app.route('/api/admin/member/<int:member_id>/permit_record', methods=['GET'])
+@admin_auth_required
+def get_member_permit_record(member_id):
+    session = g.session
+    try:
+        member = session.query(db.Member).filter_by(id=member_id).first()
+        if not member:
+            return jsonify({"error": f"Member with id {member_id} not found"}), 404
+
+        permits = session.query(db.MemberCardIssuePermit.year).filter_by(member_id=member_id).all()
+        years = sorted({p.year for p in permits if p.year is not None})
+        return jsonify({"year": years}), 200
+    except Exception as e:
+        session.rollback()
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
@@ -730,12 +758,24 @@ def get_checkin_records(conference_id):
 @admin_auth_required
 def conference_check_in(conference_id):
     session = g.session
-    data = request.get_json()
-    qrcode = data["qrcode"]
+    data = request.get_json() or {}
+    qrcode = data.get("qrcode")
+    name = data.get("name")
+
+    # Require at least one identifier
+    if not qrcode and not name:
+        return jsonify({'message': "Missing 'qrcode' or 'name' in request body"}), 400
+
     print(data)
     try:
-        # Retrieve member data based on the QR code
-        member_data = session.query(db.Member).filter(db.Member.qrcode==qrcode).first()
+        # Prefer QR code lookup when provided; otherwise fall back to name lookup
+        member_query = None
+        if qrcode:
+            member_query = session.query(db.Member).filter(db.Member.qrcode == qrcode)
+        elif name:
+            member_query = session.query(db.Member).filter(db.Member.name == name)
+
+        member_data = member_query.first() if member_query else None
         if member_data:
             prev_record = session.query(db.CheckInRecord).filter(and_(db.CheckInRecord.member_id==member_data.id, db.CheckInRecord.conference_id==conference_id)).first()
             if prev_record:
@@ -751,12 +791,14 @@ def conference_check_in(conference_id):
             
             # Log successful check-in
             admin = getattr(g, 'admin', None)
+            util.log_action(session, 'admin', admin.id, 'admin_conference_check_in', True, f"Admin {admin.account} checked in {member_data.name} to conference {conference_id}")
             
             return jsonify({'name': member_data.name, 'message': 'Check-in successful'}), 200
         else:
             # Log failed check-in attempt
             admin = getattr(g, 'admin', None)
-            return jsonify({'message': f'No member found with the provided QR code: {qrcode}'}), 404
+            util.log_action(session, 'admin', admin.id, 'admin_conference_check_in', False, f"No member found for qrcode '{qrcode}' or name '{name}'")
+            return jsonify({'message': 'No member found with the provided identifier'}), 404
     except Exception as e:
         session.rollback()
         return jsonify({'message': f'An error occurred: {str(e)}'}), 500
