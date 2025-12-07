@@ -725,6 +725,64 @@ def add_conferences():
     finally:
         session.close()
 
+@app.route('/api/admin/conference/<int:conference_id>', methods=['PATCH'])
+@admin_auth_required
+def update_conference(conference_id):
+    session = g.session
+    try:
+        data = request.get_json()
+        if not data or "name" not in data:
+            return jsonify({"error": "Missing required field: name"}), 400
+
+        conference = session.query(db.Conference).filter_by(id=conference_id).first()
+        if not conference:
+            return jsonify({"error": f"Conference with id {conference_id} not found"}), 404
+
+        old_name = conference.name
+        conference.name = data["name"]
+        session.commit()
+
+        # Log successful conference update
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_update_conference', True, f"Admin {admin.account} updated conference '{old_name}' to '{conference.name}'")
+
+        return jsonify({"success": True, "message": f"Conference {conference_id} updated successfully"}), 200
+    except Exception as e:
+        session.rollback()
+        # Log failed conference update
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_update_conference', False, f"Failed to update conference {conference_id}: {str(e)}")
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
+
+@app.route('/api/admin/conference/<int:conference_id>', methods=['DELETE'])
+@admin_auth_required
+def delete_conference(conference_id):
+    session = g.session
+    try:
+        conference = session.query(db.Conference).filter_by(id=conference_id).first()
+        if not conference:
+            return jsonify({"error": f"Conference with id {conference_id} not found"}), 404
+
+        conference_name = conference.name  # Store name before deletion
+        session.delete(conference)
+        session.commit()
+
+        # Log successful conference deletion
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_delete_conference', True, f"Admin {admin.account} deleted conference '{conference_name}'")
+
+        return jsonify({"message": f"Conference {conference_id} deleted successfully"}), 200
+    except Exception as e:
+        session.rollback()
+        # Log failed conference deletion
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_delete_conference', False, f"Failed to delete conference {conference_id}: {str(e)}")
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
+
 @app.route('/api/admin/conference/<int:conference_id>/check-in-record', methods=['GET'])
 @admin_auth_required
 def get_checkin_records(conference_id):
@@ -768,6 +826,10 @@ def conference_check_in(conference_id):
 
     print(data)
     try:
+        # Fetch conference for logging
+        conference = session.query(db.Conference).filter_by(id=conference_id).first()
+        conference_name = conference.name if conference else f"ID:{conference_id}"
+        
         # Prefer QR code lookup when provided; otherwise fall back to name lookup
         member_query = None
         if qrcode:
@@ -791,13 +853,13 @@ def conference_check_in(conference_id):
             
             # Log successful check-in
             admin = getattr(g, 'admin', None)
-            util.log_action(session, 'admin', admin.id, 'admin_conference_check_in', True, f"Admin {admin.account} checked in {member_data.name} to conference {conference_id}")
+            util.log_action(session, 'admin', admin.id, 'admin_conference_check_in', True, f"Admin {admin.account} checked in {member_data.name} to conference '{conference_name}'")
             
             return jsonify({'name': member_data.name, 'message': 'Check-in successful'}), 200
         else:
             # Log failed check-in attempt
             admin = getattr(g, 'admin', None)
-            util.log_action(session, 'admin', admin.id, 'admin_conference_check_in', False, f"No member found for qrcode '{qrcode}' or name '{name}'")
+            util.log_action(session, 'admin', admin.id, 'admin_conference_check_in', False, f"No member found for qrcode '{qrcode}' or name '{name}' at conference '{conference_name}'")
             return jsonify({'message': 'No member found with the provided identifier'}), 404
     except Exception as e:
         session.rollback()
