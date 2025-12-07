@@ -363,6 +363,14 @@ def get_members_by_admin():
         search_term = request.args.get('search', '').strip()
         id_filter = request.args.get('ids', '').strip()
         current_year = datetime.now().year
+        
+        # Get permit_year from query param, default to current year
+        permit_year = current_year
+        if request.args.get('permit_year'):
+            try:
+                permit_year = int(request.args.get('permit_year'))
+            except (TypeError, ValueError):
+                return jsonify({"error": "'permit_year' must be an integer"}), 400
 
         # Load file names from icon and card directories
         icon_dir = os.path.join(os.getcwd(), os.getenv('icons_path'))
@@ -371,8 +379,8 @@ def get_members_by_admin():
         existed_icon = set(os.listdir(icon_dir)) if os.path.exists(icon_dir) else set()
         existed_card = set(os.listdir(card_dir)) if os.path.exists(card_dir) else set()
 
-        # Subquery for permit check
-        permit_subq = session.query(db.MemberCardIssuePermit.member_id).filter_by(year=current_year).subquery()
+        # Subquery for permit check using permit_year
+        permit_subq = session.query(db.MemberCardIssuePermit.member_id).filter_by(year=permit_year).subquery()
 
         query = session.query(db.Member)
 
@@ -431,7 +439,7 @@ def get_members_by_admin():
                     .where(
                         db.MemberCardIssuePermit.member_id == m.id,
                     ).where(
-                        db.MemberCardIssuePermit.year == current_year
+                        db.MemberCardIssuePermit.year == permit_year
                     )
                 ).scalar()
             govid = m.govid or ""
@@ -528,6 +536,62 @@ def add_member():
     finally:
         session.close()
     return jsonify({'results': results}), 200
+
+
+@app.route('/api/admin/member/check-duplicate/name', methods=['POST'])
+@admin_auth_required
+def check_duplicate_member_names():
+    session = g.session
+    try:
+        data = request.get_json() or {}
+        names = data.get('names')
+
+        if names is None or not isinstance(names, list):
+            return jsonify({'error': "'names' must be a list of strings"}), 400
+
+        cleaned_names = [str(name).strip() for name in names if name is not None]
+        if not cleaned_names:
+            return jsonify({'invalid': []}), 200
+
+        existing = session.query(db.Member.name).filter(db.Member.name.in_(cleaned_names)).all()
+        invalid_names = [row[0] for row in existing]
+
+        return jsonify({'invalid': invalid_names}), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/admin/member/check-duplicate/id', methods=['POST'])
+@admin_auth_required
+def check_duplicate_member_ids():
+    session = g.session
+    try:
+        data = request.get_json() or {}
+        ids = data.get('ids')
+
+        if ids is None or not isinstance(ids, list):
+            return jsonify({'error': "'ids' must be a list of integers"}), 400
+
+        try:
+            cleaned_ids = [int(member_id) for member_id in ids]
+        except (TypeError, ValueError):
+            return jsonify({'error': "All 'ids' must be integers"}), 400
+
+        if not cleaned_ids:
+            return jsonify({'invalid': []}), 200
+
+        existing = session.query(db.Member.id).filter(db.Member.id.in_(cleaned_ids)).all()
+        invalid_ids = [row[0] for row in existing]
+
+        return jsonify({'invalid': invalid_ids}), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+    finally:
+        session.close()
 
 @app.route('/api/admin/member/<int:member_id>/edit', methods=['POST'])
 @admin_auth_required
