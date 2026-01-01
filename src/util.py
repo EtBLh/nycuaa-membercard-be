@@ -159,5 +159,11 @@ def pick(obj, *attrs):
 async def async_email_worker(subject, recipient, email_template, attachment_path):
     await async_send_email_with_attachment(subject, recipient, email_template, attachment_path)
 
-def send_email(subject, recipient, email_template):
-    send_email_with_attachment(subject, recipient, email_template, None)
+def send_email_with_attachment(subject, recipient, email_template, attachment_path):
+    # Get the current event loop from the running thread
+    loop = asyncio.new_event_loop()
+
+    asyncio.set_event_loop(loop)
+
+    # Create a background task for the async function
+    loop.run_until_complete(async_email_worker(subject, recipient, email_template, attachment_path))
