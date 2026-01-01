@@ -10,7 +10,7 @@ load_dotenv()
 url = f"mysql+pymysql://{os.getenv('db_user')}:{os.getenv('db_pw')}@{os.getenv('db_host')}/{os.getenv('db_database')}"
 engine = create_engine(url, pool_pre_ping=True)
 session_local = sessionmaker(bind=engine)
-print('[+] db connected')
+print(f'[+] db connected to {os.getenv("db_host")}')
 Base = declarative_base()
 
 class Member(Base):

@@ -85,7 +85,6 @@ def newpass(member: db.Member, permit: db.MemberCardIssuePermit):
 
     data['generic']['primaryFields'][0]['value'] = name
     data['generic']['secondaryFields'][0]['value'] = "20" + str(id)[:2]
-    data['generic']['auxiliaryFields'][0]['value'] = permit.expiry_date.strftime("%Y/%m/%d")
     
     # back field
     data['generic']['backFields'][0]['value'] = str(id) # member id
@@ -97,6 +96,8 @@ def newpass(member: db.Member, permit: db.MemberCardIssuePermit):
         data['generic']['auxiliaryFields'][0]['value'] = "團體會員"
     else: # type == 'normal'
         data['generic']['auxiliaryFields'][0]['value'] = "普通會員"
+    
+    data['generic']['auxiliaryFields'][1]['value'] = permit.expiry_date.strftime("%Y/%m/%d")
     
     # save the member's pass.json 
     with open(pass_json, 'w') as pass_json_file:
