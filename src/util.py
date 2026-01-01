@@ -13,6 +13,7 @@ from email import encoders
 from email.message import EmailMessage
 from flask import render_template
 from jinja2 import Environment, FileSystemLoader
+from datetime import datetime
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -84,8 +85,12 @@ async def async_send_email_with_attachment( subject: str, to_email: str, templat
     msg['From'] = from_email
     msg['To'] = to_email
     
-    with open(template_path, 'r', encoding='utf-8') as file:
-        html_content = file.read()
+    template_dir = os.path.join(os.getcwd(), "src", "email_templates")
+    env = Environment(loader=FileSystemLoader(template_dir))
+    template = env.get_template(os.path.basename(template_path))
+    current_year = datetime.now().year
+    previous_year = current_year - 1
+    html_content = template.render(current_year=current_year, previous_year=previous_year)
 
     html_part = MIMEText(html_content, 'html')
     msg.attach(html_part)
@@ -154,11 +159,5 @@ def pick(obj, *attrs):
 async def async_email_worker(subject, recipient, email_template, attachment_path):
     await async_send_email_with_attachment(subject, recipient, email_template, attachment_path)
 
-def send_email_with_attachment(subject, recipient, email_template, attachment_path):
-    # Get the current event loop from the running thread
-    loop = asyncio.new_event_loop()
-
-    asyncio.set_event_loop(loop)
-
-    # Create a background task for the async function
-    loop.run_until_complete(async_email_worker(subject, recipient, email_template, attachment_path))
+def send_email(subject, recipient, email_template):
+    send_email_with_attachment(subject, recipient, email_template, None)
