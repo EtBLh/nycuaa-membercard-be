@@ -62,5 +62,5 @@ class Log(Base):
     initiator       = Column(Integer, nullable=False)
     is_success      = Column(Boolean, nullable=False)
     message         = Column(String(100), nullable=False)
-    event_type      = Column(Enum('create_admin', 'delete_admin', 'modify_admin', 'add_member', 'modify_member', 'delete_member', 'issue_membercard', 'send_invitation_email', 'member_login_request', 'member_login_success', 'member_upload_icon', 'admin_login', 'admin_set_paid_status', 'admin_create_conference', 'admin_send_member_card', 'admin_update_member_card', name='event_type_enum'), nullable=False)
+    event_type      = Column(Enum('create_admin', 'delete_admin', 'modify_admin', 'add_member', 'modify_member', 'delete_member', 'issue_membercard', 'send_invitation_email', 'member_login_request', 'member_login_success', 'member_upload_icon', 'admin_login', 'admin_set_paid_status', 'admin_create_conference', 'admin_update_conference', 'admin_delete_conference', 'admin_send_member_card', 'admin_update_member_card', 'admin_conference_check_in', name='event_type_enum'), nullable=False)
     timestamp       = Column(DateTime, nullable=False, default=datetime.now)

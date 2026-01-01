@@ -363,6 +363,14 @@ def get_members_by_admin():
         search_term = request.args.get('search', '').strip()
         id_filter = request.args.get('ids', '').strip()
         current_year = datetime.now().year
+        
+        # Get permit_year from query param, default to current year
+        permit_year = current_year
+        if request.args.get('permit_year'):
+            try:
+                permit_year = int(request.args.get('permit_year'))
+            except (TypeError, ValueError):
+                return jsonify({"error": "'permit_year' must be an integer"}), 400
 
         # Load file names from icon and card directories
         icon_dir = os.path.join(os.getcwd(), os.getenv('icons_path'))
@@ -371,8 +379,8 @@ def get_members_by_admin():
         existed_icon = set(os.listdir(icon_dir)) if os.path.exists(icon_dir) else set()
         existed_card = set(os.listdir(card_dir)) if os.path.exists(card_dir) else set()
 
-        # Subquery for permit check
-        permit_subq = session.query(db.MemberCardIssuePermit.member_id).filter_by(year=current_year).subquery()
+        # Subquery for permit check using permit_year
+        permit_subq = session.query(db.MemberCardIssuePermit.member_id).filter_by(year=permit_year).subquery()
 
         query = session.query(db.Member)
 
@@ -431,7 +439,7 @@ def get_members_by_admin():
                     .where(
                         db.MemberCardIssuePermit.member_id == m.id,
                     ).where(
-                        db.MemberCardIssuePermit.year == current_year
+                        db.MemberCardIssuePermit.year == permit_year
                     )
                 ).scalar()
             govid = m.govid or ""
@@ -529,6 +537,62 @@ def add_member():
         session.close()
     return jsonify({'results': results}), 200
 
+
+@app.route('/api/admin/member/check-duplicate/name', methods=['POST'])
+@admin_auth_required
+def check_duplicate_member_names():
+    session = g.session
+    try:
+        data = request.get_json() or {}
+        names = data.get('names')
+
+        if names is None or not isinstance(names, list):
+            return jsonify({'error': "'names' must be a list of strings"}), 400
+
+        cleaned_names = [str(name).strip() for name in names if name is not None]
+        if not cleaned_names:
+            return jsonify({'invalid': []}), 200
+
+        existing = session.query(db.Member.name).filter(db.Member.name.in_(cleaned_names)).all()
+        invalid_names = [row[0] for row in existing]
+
+        return jsonify({'invalid': invalid_names}), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/admin/member/check-duplicate/id', methods=['POST'])
+@admin_auth_required
+def check_duplicate_member_ids():
+    session = g.session
+    try:
+        data = request.get_json() or {}
+        ids = data.get('ids')
+
+        if ids is None or not isinstance(ids, list):
+            return jsonify({'error': "'ids' must be a list of integers"}), 400
+
+        try:
+            cleaned_ids = [int(member_id) for member_id in ids]
+        except (TypeError, ValueError):
+            return jsonify({'error': "All 'ids' must be integers"}), 400
+
+        if not cleaned_ids:
+            return jsonify({'invalid': []}), 200
+
+        existing = session.query(db.Member.id).filter(db.Member.id.in_(cleaned_ids)).all()
+        invalid_ids = [row[0] for row in existing]
+
+        return jsonify({'invalid': invalid_ids}), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+    finally:
+        session.close()
+
 @app.route('/api/admin/member/<int:member_id>/edit', methods=['POST'])
 @admin_auth_required
 def edit_member(member_id):
@@ -578,6 +642,16 @@ def set_paid_status(member_ids):
         paid = data["paid"]
         current_year = datetime.today().year
 
+        # Optional target year override
+        target_year = current_year
+        if "year" in data and data.get("year") is not None:
+            try:
+                target_year = int(data.get("year"))
+            except (TypeError, ValueError):
+                return jsonify({"error": "'year' must be an integer"}), 400
+            if target_year < 1900 or target_year > 3000:
+                return jsonify({"error": "'year' out of supported range"}), 400
+
         # Split member_ids by comma and remove whitespace, convert to integers
         try:
             member_id_list = [int(mid.strip()) for mid in member_ids.split(',') if mid.strip()]
@@ -591,18 +665,18 @@ def set_paid_status(member_ids):
         for member_id in member_id_list:
             permit = (
                 session.query(db.MemberCardIssuePermit)
-                .filter_by(member_id=member_id, year=current_year)
+                .filter_by(member_id=member_id, year=target_year)
                 .first()
             )
 
             if paid:
                 if not permit:
                     # Create a new permit for the year
-                    expiry_date = datetime(current_year + 1, 1, 1) - timedelta(days=1)
+                    expiry_date = datetime(target_year + 1, 1, 1) - timedelta(days=1)
                     new_permit = db.MemberCardIssuePermit(
                         member_id=member_id,
                         expiry_date=expiry_date.date(),
-                        year=current_year
+                        year=target_year
                     )
                     session.add(new_permit)
                     message = "Permit created (paid set)."
@@ -621,7 +695,7 @@ def set_paid_status(member_ids):
         # Log the paid status update
         admin = getattr(g, 'admin', None)
         action_desc = "set paid status" if paid else "unset paid status"
-        util.log_action(session, 'admin', admin.id, 'admin_set_paid_status', True, f"Admin {admin.account} {action_desc} for {len(member_id_list)} members")
+        util.log_action(session, 'admin', admin.id, 'admin_set_paid_status', True, f"Admin {admin.account} {action_desc} for {len(member_id_list)} members (year={target_year})")
         
         return jsonify({"results": results}), 200
 
@@ -630,6 +704,24 @@ def set_paid_status(member_ids):
         # Log failed paid status update
         admin = getattr(g, 'admin', None)
         util.log_action(session, 'admin', admin.id, 'admin_set_paid_status', False, f"Failed to update paid status: {str(e)}")
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
+
+@app.route('/api/admin/member/<int:member_id>/permit_record', methods=['GET'])
+@admin_auth_required
+def get_member_permit_record(member_id):
+    session = g.session
+    try:
+        member = session.query(db.Member).filter_by(id=member_id).first()
+        if not member:
+            return jsonify({"error": f"Member with id {member_id} not found"}), 404
+
+        permits = session.query(db.MemberCardIssuePermit.year).filter_by(member_id=member_id).all()
+        years = sorted({p.year for p in permits if p.year is not None})
+        return jsonify({"year": years}), 200
+    except Exception as e:
+        session.rollback()
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     finally:
         session.close()
@@ -697,6 +789,64 @@ def add_conferences():
     finally:
         session.close()
 
+@app.route('/api/admin/conference/<int:conference_id>', methods=['PATCH'])
+@admin_auth_required
+def update_conference(conference_id):
+    session = g.session
+    try:
+        data = request.get_json()
+        if not data or "name" not in data:
+            return jsonify({"error": "Missing required field: name"}), 400
+
+        conference = session.query(db.Conference).filter_by(id=conference_id).first()
+        if not conference:
+            return jsonify({"error": f"Conference with id {conference_id} not found"}), 404
+
+        old_name = conference.name
+        conference.name = data["name"]
+        session.commit()
+
+        # Log successful conference update
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_update_conference', True, f"Admin {admin.account} updated conference '{old_name}' to '{conference.name}'")
+
+        return jsonify({"success": True, "message": f"Conference {conference_id} updated successfully"}), 200
+    except Exception as e:
+        session.rollback()
+        # Log failed conference update
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_update_conference', False, f"Failed to update conference {conference_id}: {str(e)}")
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
+
+@app.route('/api/admin/conference/<int:conference_id>', methods=['DELETE'])
+@admin_auth_required
+def delete_conference(conference_id):
+    session = g.session
+    try:
+        conference = session.query(db.Conference).filter_by(id=conference_id).first()
+        if not conference:
+            return jsonify({"error": f"Conference with id {conference_id} not found"}), 404
+
+        conference_name = conference.name  # Store name before deletion
+        session.delete(conference)
+        session.commit()
+
+        # Log successful conference deletion
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_delete_conference', True, f"Admin {admin.account} deleted conference '{conference_name}'")
+
+        return jsonify({"message": f"Conference {conference_id} deleted successfully"}), 200
+    except Exception as e:
+        session.rollback()
+        # Log failed conference deletion
+        admin = getattr(g, 'admin', None)
+        util.log_action(session, 'admin', admin.id, 'admin_delete_conference', False, f"Failed to delete conference {conference_id}: {str(e)}")
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    finally:
+        session.close()
+
 @app.route('/api/admin/conference/<int:conference_id>/check-in-record', methods=['GET'])
 @admin_auth_required
 def get_checkin_records(conference_id):
@@ -730,12 +880,28 @@ def get_checkin_records(conference_id):
 @admin_auth_required
 def conference_check_in(conference_id):
     session = g.session
-    data = request.get_json()
-    qrcode = data["qrcode"]
+    data = request.get_json() or {}
+    qrcode = data.get("qrcode")
+    name = data.get("name")
+
+    # Require at least one identifier
+    if not qrcode and not name:
+        return jsonify({'message': "Missing 'qrcode' or 'name' in request body"}), 400
+
     print(data)
     try:
-        # Retrieve member data based on the QR code
-        member_data = session.query(db.Member).filter(db.Member.qrcode==qrcode).first()
+        # Fetch conference for logging
+        conference = session.query(db.Conference).filter_by(id=conference_id).first()
+        conference_name = conference.name if conference else f"ID:{conference_id}"
+        
+        # Prefer QR code lookup when provided; otherwise fall back to name lookup
+        member_query = None
+        if qrcode:
+            member_query = session.query(db.Member).filter(db.Member.qrcode == qrcode)
+        elif name:
+            member_query = session.query(db.Member).filter(db.Member.name == name)
+
+        member_data = member_query.first() if member_query else None
         if member_data:
             prev_record = session.query(db.CheckInRecord).filter(and_(db.CheckInRecord.member_id==member_data.id, db.CheckInRecord.conference_id==conference_id)).first()
             if prev_record:
@@ -751,12 +917,14 @@ def conference_check_in(conference_id):
             
             # Log successful check-in
             admin = getattr(g, 'admin', None)
+            util.log_action(session, 'admin', admin.id, 'admin_conference_check_in', True, f"Admin {admin.account} checked in {member_data.name} to conference '{conference_name}'")
             
             return jsonify({'name': member_data.name, 'message': 'Check-in successful'}), 200
         else:
             # Log failed check-in attempt
             admin = getattr(g, 'admin', None)
-            return jsonify({'message': f'No member found with the provided QR code: {qrcode}'}), 404
+            util.log_action(session, 'admin', admin.id, 'admin_conference_check_in', False, f"No member found for qrcode '{qrcode}' or name '{name}' at conference '{conference_name}'")
+            return jsonify({'message': 'No member found with the provided identifier'}), 404
     except Exception as e:
         session.rollback()
         return jsonify({'message': f'An error occurred: {str(e)}'}), 500
